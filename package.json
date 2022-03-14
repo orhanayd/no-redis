@@ -1,0 +1,52 @@
+{
+  "name": "no-redis",
+  "version": "1.0.0",
+  "description": "Simple & Fast Node.JS memory caching",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/orhanayd/no-redis.git"
+  },
+  "keywords": [
+    "redis",
+    "cache",
+    "caching",
+    "local",
+    "variable",
+    "multi",
+    "memory",
+    "internal",
+    "node",
+    "memcached",
+    "object"
+  ],
+  "tags": [
+    "redis",
+    "cache",
+    "caching",
+    "local",
+    "variable",
+    "multi",
+    "memory",
+    "internal",
+    "node",
+    "memcached",
+    "object"
+  ],
+  "author": "orhanayd <info@orhanaydogdu.com.tr>",
+  "maintainers": [
+    {
+      "name": "Orhan A.",
+      "email": "info@orhanaydogdu.com.tr",
+      "url": "https://github.com/orhanayd"
+    }
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/orhanayd/no-redis/issues"
+  },
+  "homepage": "https://github.com/orhanayd/no-redis#readme"
+}

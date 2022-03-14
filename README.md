@@ -4,6 +4,9 @@
 - **Support:** hex store, object, array, string, integer, boolean....
 - **Full-featured:** A simple caching setItem, getItem and deleteItem methods and works a like redis. Keys can have a timeout (ttl) after which they expire and are deleted from the cache. All keys are stored in a single object so the practical limit is at around 1m keys.
 
+#### Prerequisite:
+- Node.js, at least v12 >
+
 # Examples:
 
 ## Initialize (INIT):
