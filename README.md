@@ -12,7 +12,7 @@
 ## Initialize (INIT):
 
 ```js
-const noRedis = require( "no-redis" );
+const noRedis = require("no-redis");
 ```
 
 ## Store a key (setItem):
@@ -20,14 +20,14 @@ Sets a key value pair. It is possible to define a ttl (in seconds). Returns true
 ```js
 let obj = { name: "orhan", age: 26 };
  
-result = noRedis.setItem( "user1", obj,  10 );
+result = noRedis.setItem("user1", obj,  10 );
 // true
 ```
 
 ## Retrieve a key (getItem):
 Gets a saved value from the cache. Returns a null if not found or expired. If the value was found it returns the value.
 ```js 
-result = noRedis.getItem( "user1");
+result = noRedis.getItem("user1");
 if(!result){
 	// no data
 }
@@ -38,7 +38,7 @@ if(!result){
 Delete a key. Returns the true or false.
 
 ```js 
-result = noRedis.deleteItem( "user1");
+result = noRedis.deleteItem("user1");
 // true
 ```
 ## Flush all keys (flushAll)
