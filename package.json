@@ -1,5 +1,5 @@
 {
-  "name": "no-redis",
+  "name": "noderedis",
   "version": "1.0.0",
   "description": "Simple & Fast Node.JS memory caching",
   "main": "index.js",
