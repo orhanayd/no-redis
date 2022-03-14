@@ -1,7 +1,7 @@
 ### no-redis
 ### Simple & Fast Node.JS memory caching
 
-- **Support **hex store, object, array, string, integer, boolean....
+- **Support ** hex store, object, array, string, integer, boolean....
 - **Full-featured:** A simple caching setItem, getItem and deleteItem methods and works a like redis. Keys can have a timeout (ttl) after which they expire and are deleted from the cache. All keys are stored in a single object so the practical limit is at around 1m keys.
 
 # Examples:
@@ -61,13 +61,13 @@ result = noRedis.stats({ showKeys: true, showTotal: true, showSize: true });
 		}
 */
 ```
-**killerIsFinished: **the ttl value indicates whether the function is finished deleting obsolete values.
+**killerIsFinished: ** The ttl value indicates whether the function is finished deleting obsolete values.
 **lastKiller:** The unix timestamp value of the last time old values were deleted.
 **nextKiller:** The unix timestamp value when it will delete old values.
-**criticalError: **is the value of how many times it gets critical errors and therefore how many times it reboots itself "no-redis".
+**criticalError: ** is the value of how many times it gets critical errors and therefore how many times it reboots itself "no-redis".
 **total:** Key count
-**keys: **Array of all existing keys.
-**size: **Value size count in approximately file size (Bytes, KB, MB, GB, TB)
+**keys: ** Array of all existing keys.
+**size: ** Value size count in approximately file size (Bytes, KB, MB, GB, TB)
 ## Notes:
 - key must be string,
 - default ttl is 30 seconds
