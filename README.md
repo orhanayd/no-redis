@@ -38,13 +38,6 @@ Delete a key. Returns the true or false.
 result = noRedis.deleteItem( "user1");
 // true
 ```
-## Delete a key (deleteItem):
-Delete a key. Returns the true or false.
-
-```js 
-result = noRedis.deleteItem( "user1");
-// true
-```
 ## Flush all keys (flushAll)
 Flush all data.
 ```js 
@@ -52,7 +45,7 @@ result = noRedis.flushAll();
 // true
 ```
 
-## Store Statistics (flushAll)
+## Store Statistics (stats)
 Returns the statistics.
 ```js
 result = noRedis.stats({ showKeys: true, showTotal: true, showSize: true });
