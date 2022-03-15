@@ -4,6 +4,7 @@ const memory = {
         killerIsFinished: true,
         lastKiller: 0,
         nextKiller: 0,
+        totalHits: 0,
         ttl: defaultTtl,
         intervalSecond: 5,
         criticalError: 0
@@ -32,9 +33,11 @@ module.exports.setItem = (key, value, ttl = memory.config.ttl) => {
         ttl = parseInt(ttl, 10);
         memory.store[`${key}`] = {
             value: null,
+            hit: 0,
             expires_at: null
         };
         memory.store[`${key}`].value = value;
+        memory.store[`${key}`].hit = 0;
         memory.store[`${key}`].expires_at = (Math.floor(new Date() / 1000) + ttl);
         return true;
     } catch (error) {
@@ -44,7 +47,30 @@ module.exports.setItem = (key, value, ttl = memory.config.ttl) => {
 }
 
 /**
+ * get item stats
+ * 
+ * @param {string} key 
+ * @returns {object}
+ */
+module.exports.itemStats = (key) => {
+    try {
+        if (memory.store[`${key}`]) {
+            return {
+                expires_at: memory.store[`${key}`].expires_at,
+                remaining_seconds: (memory.store[`${key}`].expires_at - (Math.floor(new Date() / 1000))),
+                hit: memory.store[`${key}`].hit
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('no-redis -> Cant get item stats Error! ', error);
+        return false;
+    }
+}
+
+/**
  * get item from no-redis
+ * 
  * @param {string} key 
  * @returns {*}
  */
@@ -55,9 +81,9 @@ module.exports.getItem = (key) => {
             return false;
         }
         if (memory.store[`${key}`] && memory.store[`${key}`].expires_at > (Math.floor(new Date() / 1000))) {
+            memory.store[`${key}`].hit++;
+            memory.config.totalHits++;
             return memory.store[`${key}`].value;
-        } else {
-
         }
         return null;
     } catch (error) {
@@ -77,6 +103,7 @@ module.exports.deleteItem = (key) => {
     try {
         if (memory.store[`${key}`]) {
             memory.store[`${key}`].value = null;
+            memory.store[`${key}`].hit = null;
             memory.store[`${key}`].expires_at = null;
             delete memory.store[`${key}`];
         }
@@ -115,15 +142,16 @@ module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: fa
             lastKiller: memory.config.lastKiller,
             nextKiller: memory.config.nextKiller,
             criticalError: memory.config.criticalError,
+            totalHits: memory.config.totalHits
         };
         if (config.showTotal) {
             result.total = Object.keys(memory.store).length;
         }
-        if (config.showKeys) {
-            result.keys = Object.keys(memory.store);
-        }
         if (config.showSize) {
             result.size = roughSizeOfObject(memory.store);
+        }
+        if (config.showKeys) {
+            result.keys = Object.keys(memory.store);
         }
         return result;
     } catch (error) {
@@ -144,6 +172,7 @@ function defaultMemory() {
                 killerIsFinished: true,
                 lastKiller: 0,
                 nextKiller: 0,
+                totalHits: 0,
                 ttl: defaultTtl,
                 intervalSecond: 5,
                 criticalError: criticalError

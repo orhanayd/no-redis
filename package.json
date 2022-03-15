@@ -1,6 +1,6 @@
 {
   "name": "nope-redis",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Simple & Fast Node.JS memory caching",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "internal",
     "node",
     "memcached",
-    "object"
+    "temp"
   ],
   "tags": [
     "redis",
@@ -34,7 +34,7 @@
     "internal",
     "node",
     "memcached",
-    "object"
+    "temp"
   ],
   "author": "orhanayd <info@orhanaydogdu.com.tr>",
   "maintainers": [
