@@ -1,26 +1,53 @@
-const defaultTtl = 30;
+let defaultTtl = 30;
+let isMemoryStatsEnabled = false;
+let criticalError = 0;
+
 const memory = {
     config: {
         killerIsFinished: true,
         lastKiller: 0,
         nextKiller: 0,
         totalHits: 0,
-        ttl: defaultTtl,
         intervalSecond: 5,
-        criticalError: 0
+        nextMemoryStatsTime: 0,
+        memoryStats: {}
     },
     store: {}
 };
-let criticalError = 0;
+
+
+/**
+ * no-redis config
+ * 
+ * @param {object} options 
+ * @returns {boolean}
+ */
+module.exports.config = (options = { isMemoryStatsEnabled, defaultTtl }) => {
+    try {
+        if (typeof options === 'object') {
+            if (options.isMemoryStatsEnabled === true || options.isMemoryStatsEnabled === false) {
+                isMemoryStatsEnabled = options.isMemoryStatsEnabled;
+            }
+            if (options.defaultTtl && options.defaultTtl > 0) {
+                defaultTtl = options.defaultTtl;
+            }
+            return true;
+        }
+    } catch (error) {
+        console.error('no redis - config error', error);
+    }
+    return false;
+}
 
 /**
  * set item to no-redis
  * 
  * @param {string} key 
  * @param {*} value 
+ * @param {number} ttl 
  * @returns {Boolean}
  */
-module.exports.setItem = (key, value, ttl = memory.config.ttl) => {
+module.exports.setItem = (key, value, ttl = defaultTtl) => {
     try {
         if (typeof key !== 'string') {
             console.error('no-redis -> key must be string!')
@@ -132,7 +159,7 @@ module.exports.flushAll = () => {
 /**
  * get stats from noRedis
  * 
- * @param {object}} config 
+ * @param {object} config 
  * @returns {object}
  */
 module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: false }) => {
@@ -141,9 +168,14 @@ module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: fa
             killerIsFinished: memory.config.killerIsFinished,
             lastKiller: memory.config.lastKiller,
             nextKiller: memory.config.nextKiller,
-            criticalError: memory.config.criticalError,
-            totalHits: memory.config.totalHits
+            criticalError,
+            defaultTtl,
+            totalHits: memory.config.totalHits,
+            isMemoryStatsEnabled
         };
+        if (isMemoryStatsEnabled) {
+            result.nextMemoryStatsTime = memory.config.nextMemoryStatsTime;
+        }
         if (config.showTotal) {
             result.total = Object.keys(memory.store).length;
         }
@@ -153,9 +185,12 @@ module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: fa
         if (config.showKeys) {
             result.keys = Object.keys(memory.store);
         }
+        if (isMemoryStatsEnabled) {
+            result.memoryStats = memory.config.memoryStats;
+        }
         return result;
     } catch (error) {
-        console.error(error);
+        console.error('no-redis - stats error!', error);
         return false;
     }
 }
@@ -173,9 +208,7 @@ function defaultMemory() {
                 lastKiller: 0,
                 nextKiller: 0,
                 totalHits: 0,
-                ttl: defaultTtl,
-                intervalSecond: 5,
-                criticalError: criticalError
+                intervalSecond: 5
             },
             store: {}
         };
@@ -194,44 +227,56 @@ function defaultMemory() {
  * @returns {string}
  */
 function roughSizeOfObject(object) {
-    function formatSizeUnits(bytes) {
-        if (bytes >= 1073741824) { bytes = (bytes / 1073741824).toFixed(2) + " GB"; }
-        else if (bytes >= 1048576) { bytes = (bytes / 1048576).toFixed(2) + " MB"; }
-        else if (bytes >= 1024) { bytes = (bytes / 1024).toFixed(2) + " KB"; }
-        else if (bytes > 1) { bytes = bytes + " bytes"; }
-        else if (bytes == 1) { bytes = bytes + " byte"; }
-        else { bytes = "0 bytes"; }
-        return bytes;
-    }
-    let objectList = [];
-    let stack = [object];
-    let bytes = 0;
-
-    while (stack.length) {
-        let value = stack.pop();
-
-        if (typeof value === 'boolean') {
-            bytes += 4;
+    try {
+        function formatSizeUnits(bytes) {
+            if (bytes >= 1073741824) { bytes = (bytes / 1073741824).toFixed(2) + " GB"; }
+            else if (bytes >= 1048576) { bytes = (bytes / 1048576).toFixed(2) + " MB"; }
+            else if (bytes >= 1024) { bytes = (bytes / 1024).toFixed(2) + " KB"; }
+            else if (bytes > 1) { bytes = bytes + " bytes"; }
+            else if (bytes == 1) { bytes = bytes + " byte"; }
+            else { bytes = "0 bytes"; }
+            return bytes;
         }
-        else if (typeof value === 'string') {
-            bytes += value.length * 2;
-        }
-        else if (typeof value === 'number') {
-            bytes += 8;
-        }
-        else if
-            (
-            typeof value === 'object'
-            && objectList.indexOf(value) === -1
-        ) {
-            objectList.push(value);
+        let objectList = [];
+        let stack = [object];
+        let bytes = 0;
 
-            for (let i in value) {
-                stack.push(value[i]);
+        while (stack.length) {
+            let value = stack.pop();
+
+            if (typeof value === 'boolean') {
+                bytes += 4;
+            }
+            else if (typeof value === 'string') {
+                bytes += value.length * 2;
+            }
+            else if (typeof value === 'number') {
+                bytes += 8;
+            }
+            else if (typeof value === 'object' &&
+                objectList.indexOf(value) === -1
+            ) {
+                objectList.push(value);
+                for (let i in value) {
+                    stack.push(value[i]);
+                }
             }
         }
+        return formatSizeUnits(bytes);
+    } catch (error) {
+        console.error('no-redis - roughSizeOfObject error!', error);
+        return 'Error !';
     }
-    return formatSizeUnits(bytes);
+}
+
+async function memoryStats() {
+    try {
+        const date = new Date();
+        memory.config.memoryStats[`${date.getFullYear() + '-' + date.getMonth() + '-' + date.getDate() + 'T' + date.getHours() + ':' + date.getMinutes()}`] = roughSizeOfObject(memory.store);
+    } catch (error) {
+        console.error('no-redis - error!', error);
+        return false;
+    }
 }
 
 /**
@@ -240,13 +285,19 @@ function roughSizeOfObject(object) {
 function killer() {
     memory.config.killerIsFinished = false;
     for (const property in memory.store) {
-        if (memory.store[`${property}`].expires_at < (Math.floor(new Date() / 1000))) {
-            memory.store[`${property}`] = null;
-            delete memory.store[`${property}`];
+        if (memory.store[`${property} `].expires_at < (Math.floor(new Date() / 1000))) {
+            memory.store[`${property} `] = null;
+            delete memory.store[`${property} `];
         }
     }
     memory.config.killerIsFinished = true;
     memory.config.lastKiller = (Math.floor(new Date() / 1000));
+    if (isMemoryStatsEnabled) {
+        if ((Math.floor(new Date() / 1000)) >= memory.config.nextMemoryStatsTime) {
+            memoryStats();
+            memory.config.nextMemoryStatsTime = ((Math.floor(new Date() / 1000) + 1 * 60 * 60));
+        }
+    }
 }
 
 /**
