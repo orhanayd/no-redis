@@ -1,8 +1,8 @@
 ### nope-redis
 ### Simple & Fast Node.JS memory caching
 
-- **Support:** hex store, object, array, string, integer, boolean....
-- **Full-featured:** A simple caching setItem, getItem and deleteItem methods and works a like redis. Keys can have a timeout (ttl) after which they expire and are deleted from the cache. All keys are stored in a single object so the practical limit is at around 1m keys.
+- **Support:** object, array, string, integer, boolean, hex store, function, WHAT YOU WANT.
+- **Full-featured:** A simple caching system with `setItem`, `getItem`, and `deleteItem` methods, designed to function similar to Redis. Keys in this system can have a specified timeout (`ttl`), after which they expire and are automatically deleted from the cache. All keys are stored within a single object, so the practical limit is approximately 1 million keys.
 
 #### Prerequisite:
 - Node.js, at least v12 >
@@ -59,12 +59,25 @@ result = nopeRedis.flushAll();
 // true
 ```
 
+## Stop Service (SERVICE_KILL)
+Stops the "nope-redis" service.
+```js 
+result = nopeRedis.SERVICE_KILL();
+// true
+```
+## Start SERVICE (SERVICE_START)
+Start the "nope-redis" service. **IT STARTS AUTOMATICALLY BY DEFAULT.** YOU DON'T NEED THIS. JUST USE WHEN YOU "SERVICE_KILL"
+```js 
+result = nopeRedis.SERVICE_START();
+// true
+```
 ## Store Statistics (stats)
 Returns the statistics and information.
 ```js
 result = nopeRedis.stats({ showKeys: true, showTotal: true, showSize: true });
 /*
 		{
+		    "status": true,
 			"killerIsFinished": true,
 			"lastKiller": 1647245881,
 			"nextKiller": 1647245886,
@@ -77,6 +90,7 @@ result = nopeRedis.stats({ showKeys: true, showTotal: true, showSize: true });
 */
 ```
 
+- **status:** nope-redis service status.
 - **killerIsFinished:** The ttl value indicates whether the function is finished deleting obsolete values.
 - **lastKiller:** The unix timestamp value of the last time old values were deleted.
 - **nextKiller:** The unix timestamp value when it will delete old values.
@@ -105,3 +119,6 @@ The second it takes in total to set or get 250.000 records.
 ## Notes:
 - key must be string,
 - default ttl is 30 seconds
+- If you activate memoryStats calculation, it will operate every 1 hour.
+- Data that is due for deletion is purged in bulk every 5 seconds.
+- On average, it consumes around 6-7 MB when idle.
