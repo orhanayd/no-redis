@@ -3,6 +3,7 @@ let defaultTtl = 30;
 let isMemoryStatsEnabled = false;
 let criticalError = 0;
 let KILL_SERVICE = false;
+let intervalSecond = 5;
 
 const memory = {
     config: {
@@ -11,7 +12,6 @@ const memory = {
         lastKiller: 0,
         nextKiller: 0,
         totalHits: 0,
-        intervalSecond: 5,
         nextMemoryStatsTime: 0,
         memoryStats: {}
     },
@@ -234,7 +234,6 @@ function defaultMemory(withConfig = false) {
                 lastKiller: 0,
                 nextKiller: 0,
                 totalHits: 0,
-                intervalSecond: 5,
                 nextMemoryStatsTime: 0,
                 status: false,
                 memoryStats: {}
@@ -374,7 +373,7 @@ function runner() {
                 if (memory.config.killerIsFinished) {
                     killer();
                 }
-                memory.config.nextKiller = (Math.floor(new Date() / 1000) + memory.config.intervalSecond);
+                memory.config.nextKiller = (Math.floor(new Date() / 1000) + intervalSecond);
             } catch (error) {
                 console.error('nope-redis -> Critical Error flushed all data! > ', error);
                 clearInterval(runnerInterval);
@@ -382,7 +381,7 @@ function runner() {
                 criticalError++;
                 runner();
             }
-        }, (memory.config.intervalSecond * 1000));
+        }, (intervalSecond * 1000));
     } catch (error) {
         console.error('nope-redis -> Critical Error flushed all data! > ', error);
         if(typeof runnerInterval !== 'undefined'){
