@@ -121,4 +121,4 @@ The second it takes in total to set or get 250.000 records.
 - default ttl is 30 seconds
 - If you activate memoryStats calculation, it will operate every 1 hour.
 - Data that is due for deletion is purged in bulk every 5 seconds.
-- On average, it consumes around 6-7 MB when idle.
+- On average, it consumes around 6-7 MB when idle. (Node Process include.)
