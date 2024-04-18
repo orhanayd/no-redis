@@ -396,4 +396,6 @@ function runner() {
     }
 }
 
-runner();
+if(memory.config.status === false){
+    runner();
+}
