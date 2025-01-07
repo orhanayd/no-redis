@@ -37,13 +37,7 @@ module.exports.config = (options = { isMemoryStatsEnabled, defaultTtl }) => {
 				const now_ttl = Number.parseInt(options.defaultTtl, 10);
 				if (Number.isNaN(now_ttl) === false) {
 					defaultTtl = now_ttl;
-				} else {
-					console.error("nope-redis -> defaultTtl isNaN");
 				}
-			} else {
-				console.error(
-					"nope-redis -> defaultTtl is not number or not bigger than 0",
-				);
 			}
 			return true;
 		}
@@ -67,11 +61,9 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 			return false;
 		}
 		if (typeof key !== "string") {
-			console.error("nope-redis -> key must be string!");
 			return false;
 		}
 		if (typeof ttl !== "number") {
-			console.error("nope-redis -> key must be number!");
 			return false;
 		}
 		ttl = Number.parseInt(ttl, 10);
@@ -125,7 +117,6 @@ module.exports.getItem = (key) => {
 			return false;
 		}
 		if (typeof key !== "string") {
-			console.error("nope-redis -> key must be string!");
 			return false;
 		}
 		if (
@@ -366,7 +357,6 @@ module.exports.SERVICE_START = async () => {
 	) {
 		return runner();
 	}
-	console.error("nope-redis -> nope redis already working...");
 	return false;
 };
 
