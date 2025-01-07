@@ -1,52 +1,52 @@
 {
-  "name": "nope-redis",
-  "version": "1.3.3",
-  "description": "Simple & Fast Node.JS memory caching",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/orhanayd/no-redis.git"
-  },
-  "keywords": [
-    "redis",
-    "cache",
-    "caching",
-    "local",
-    "variable",
-    "multi",
-    "memory",
-    "internal",
-    "node",
-    "memcached",
-    "temp"
-  ],
-  "tags": [
-    "redis",
-    "cache",
-    "caching",
-    "local",
-    "variable",
-    "multi",
-    "memory",
-    "internal",
-    "node",
-    "memcached",
-    "temp"
-  ],
-  "author": "orhanayd <info@orhanaydogdu.com.tr>",
-  "maintainers": [
-    {
-      "name": "Orhan A.",
-      "email": "info@orhanaydogdu.com.tr",
-      "url": "https://github.com/orhanayd"
-    }
-  ],
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/orhanayd/no-redis/issues"
-  },
-  "homepage": "https://github.com/orhanayd/no-redis#readme"
+	"name": "nope-redis",
+	"version": "1.3.4",
+	"description": "Simple & Fast Node.JS memory caching",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/orhanayd/no-redis.git"
+	},
+	"keywords": [
+		"redis",
+		"cache",
+		"caching",
+		"local",
+		"variable",
+		"multi",
+		"memory",
+		"internal",
+		"node",
+		"memcached",
+		"temp"
+	],
+	"tags": [
+		"redis",
+		"cache",
+		"caching",
+		"local",
+		"variable",
+		"multi",
+		"memory",
+		"internal",
+		"node",
+		"memcached",
+		"temp"
+	],
+	"author": "orhanayd <info@orhanaydogdu.com.tr>",
+	"maintainers": [
+		{
+			"name": "Orhan A.",
+			"email": "info@orhanaydogdu.com.tr",
+			"url": "https://github.com/orhanayd"
+		}
+	],
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/orhanayd/no-redis/issues"
+	},
+	"homepage": "https://github.com/orhanayd/no-redis#readme"
 }
