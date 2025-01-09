@@ -4,6 +4,7 @@ let isMemoryStatsEnabled = false;
 let criticalError = 0;
 let KILL_SERVICE = false;
 const intervalSecond = 5;
+let runnerInterval = null;
 
 const memory = {
 	config: {
@@ -57,24 +58,18 @@ module.exports.config = (options = { isMemoryStatsEnabled, defaultTtl }) => {
  */
 module.exports.setItem = (key, value, ttl = defaultTtl) => {
 	try {
-		if (memory.config.status === false) {
+		if (
+			memory.config.status === false ||
+			typeof key !== "string" ||
+			typeof ttl !== "number"
+		) {
 			return false;
 		}
-		if (typeof key !== "string") {
-			return false;
-		}
-		if (typeof ttl !== "number") {
-			return false;
-		}
-		ttl = Number.parseInt(ttl, 10);
 		memory.store[`${key}`] = {
-			value: null,
+			value: value,
 			hit: 0,
-			expires_at: null,
+			expires_at: Math.floor(new Date() / 1000) + Number.parseInt(ttl, 10),
 		};
-		memory.store[`${key}`].value = value;
-		memory.store[`${key}`].hit = 0;
-		memory.store[`${key}`].expires_at = Math.floor(new Date() / 1000) + ttl;
 		return true;
 	} catch (error) {
 		console.error("nope-redis -> Cant Set Error! ", error);
@@ -113,10 +108,7 @@ module.exports.itemStats = (key) => {
  */
 module.exports.getItem = (key) => {
 	try {
-		if (memory.config.status === false) {
-			return false;
-		}
-		if (typeof key !== "string") {
+		if (memory.config.status === false || typeof key !== "string") {
 			return false;
 		}
 		if (
@@ -146,9 +138,6 @@ module.exports.deleteItem = (key) => {
 			return false;
 		}
 		if (memory.store[`${key}`]) {
-			memory.store[`${key}`].value = null;
-			memory.store[`${key}`].hit = null;
-			memory.store[`${key}`].expires_at = null;
 			delete memory.store[`${key}`];
 		}
 		return true;
@@ -255,21 +244,22 @@ function defaultMemory(withConfig = false) {
 function roughSizeOfObject(object) {
 	try {
 		function formatSizeUnits(unit_bytes) {
-			let bytes = "";
 			if (bytes >= 1073741824) {
-				bytes = `${(unit_bytes / 1073741824).toFixed(2)} GB`;
-			} else if (unit_bytes >= 1048576) {
-				bytes = `${(unit_bytes / 1048576).toFixed(2)} MB`;
-			} else if (unit_bytes >= 1024) {
-				bytes = `${(unit_bytes / 1024).toFixed(2)} KB`;
-			} else if (unit_bytes > 1) {
-				bytes = `${unit_bytes} bytes`;
-			} else if (unit_bytes === 1) {
-				bytes = `${unit_bytes} byte`;
-			} else {
-				bytes = "0 bytes";
+				return `${(unit_bytes / 1073741824).toFixed(2)} GB`;
 			}
-			return bytes;
+			if (unit_bytes >= 1048576) {
+				return `${(unit_bytes / 1048576).toFixed(2)} MB`;
+			}
+			if (unit_bytes >= 1024) {
+				return `${(unit_bytes / 1024).toFixed(2)} KB`;
+			}
+			if (unit_bytes > 1) {
+				return `${unit_bytes} bytes`;
+			}
+			if (unit_bytes === 1) {
+				return `${unit_bytes} byte`;
+			}
+			return "0 bytes";
 		}
 		const objectList = [];
 		const stack = [object];
@@ -329,7 +319,6 @@ function killer() {
 		if (
 			memory.store[`${property}`].expires_at < Math.floor(new Date() / 1000)
 		) {
-			memory.store[`${property}`] = null;
 			delete memory.store[`${property}`];
 		}
 	}
@@ -364,7 +353,6 @@ module.exports.SERVICE_START = async () => {
  * init runner
  */
 function runner() {
-	let runnerInterval = null;
 	try {
 		if (memory.config.status === false) {
 			if (criticalError <= 3) {
