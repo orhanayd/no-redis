@@ -1,4 +1,5 @@
-/* eslint-disable no-inner-declarations */
+const kk_date = require('kk-date');
+
 let defaultTtl = 30;
 let isMemoryStatsEnabled = false;
 let criticalError = 0;
@@ -30,11 +31,11 @@ module.exports.config = (options = { isMemoryStatsEnabled, defaultTtl }) => {
 		if (memory.config.status === false) {
 			return false;
 		}
-		if (typeof options === "object") {
-			if (typeof options.isMemoryStatsEnabled === "boolean") {
+		if (typeof options === 'object') {
+			if (typeof options.isMemoryStatsEnabled === 'boolean') {
 				isMemoryStatsEnabled = options.isMemoryStatsEnabled;
 			}
-			if (typeof options.defaultTtl === "number" && options.defaultTtl > 0) {
+			if (typeof options.defaultTtl === 'number' && options.defaultTtl > 0) {
 				const now_ttl = Number.parseInt(options.defaultTtl, 10);
 				if (Number.isNaN(now_ttl) === false) {
 					defaultTtl = now_ttl;
@@ -43,7 +44,7 @@ module.exports.config = (options = { isMemoryStatsEnabled, defaultTtl }) => {
 			return true;
 		}
 	} catch (error) {
-		console.error("nope-redis -> config error", error);
+		console.error('nope-redis -> config error', error);
 	}
 	return false;
 };
@@ -58,21 +59,17 @@ module.exports.config = (options = { isMemoryStatsEnabled, defaultTtl }) => {
  */
 module.exports.setItem = (key, value, ttl = defaultTtl) => {
 	try {
-		if (
-			memory.config.status === false ||
-			typeof key !== "string" ||
-			typeof ttl !== "number"
-		) {
+		if (memory.config.status === false || typeof key !== 'string' || typeof ttl !== 'number') {
 			return false;
 		}
 		memory.store[`${key}`] = {
 			value: value,
 			hit: 0,
-			expires_at: Math.floor(new Date() / 1000) + Number.parseInt(ttl, 10),
+			expires_at: new kk_date().format('X') + Number.parseInt(ttl, 10),
 		};
 		return true;
 	} catch (error) {
-		console.error("nope-redis -> Cant Set Error! ", error);
+		console.error('nope-redis -> Cant Set Error! ', error);
 		return false;
 	}
 };
@@ -88,14 +85,13 @@ module.exports.itemStats = (key) => {
 		if (memory.store[`${key}`]) {
 			return {
 				expires_at: memory.store[`${key}`].expires_at,
-				remaining_seconds:
-					memory.store[`${key}`].expires_at - Math.floor(new Date() / 1000),
+				remaining_seconds: memory.store[`${key}`].expires_at - new kk_date().format('X'),
 				hit: memory.store[`${key}`].hit,
 			};
 		}
 		return null;
 	} catch (error) {
-		console.error("nope-redis -> Cant get item stats Error! ", error);
+		console.error('nope-redis -> Cant get item stats Error! ', error);
 		return false;
 	}
 };
@@ -108,20 +104,17 @@ module.exports.itemStats = (key) => {
  */
 module.exports.getItem = (key) => {
 	try {
-		if (memory.config.status === false || typeof key !== "string") {
+		if (memory.config.status === false || typeof key !== 'string') {
 			return false;
 		}
-		if (
-			memory.store[`${key}`] &&
-			memory.store[`${key}`].expires_at > Math.floor(new Date() / 1000)
-		) {
+		if (memory.store[`${key}`] && memory.store[`${key}`].expires_at > new kk_date().format('X')) {
 			memory.store[`${key}`].hit++;
 			memory.config.totalHits++;
 			return memory.store[`${key}`].value;
 		}
 		return null;
 	} catch (error) {
-		console.error("nope-redis -> Crital error! ", error);
+		console.error('nope-redis -> Crital error! ', error);
 		return false;
 	}
 };
@@ -142,7 +135,7 @@ module.exports.deleteItem = (key) => {
 		}
 		return true;
 	} catch (error) {
-		console.error("nope-redis -> Cant delete item", error);
+		console.error('nope-redis -> Cant delete item', error);
 		return false;
 	}
 };
@@ -161,7 +154,7 @@ module.exports.flushAll = () => {
 		defaultMemory(false);
 		return true;
 	} catch (error) {
-		console.error("nope-redis -> Cant flush!", error);
+		console.error('nope-redis -> Cant flush!', error);
 		return false;
 	}
 };
@@ -172,9 +165,7 @@ module.exports.flushAll = () => {
  * @param {object} config
  * @returns {object}
  */
-module.exports.stats = (
-	config = { showKeys: true, showTotal: true, showSize: false },
-) => {
+module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: false }) => {
 	try {
 		const result = {
 			status: memory.config.status,
@@ -201,7 +192,7 @@ module.exports.stats = (
 		}
 		return result;
 	} catch (error) {
-		console.error("nope-redis -> stats error!", error);
+		console.error('nope-redis -> stats error!', error);
 		return false;
 	}
 };
@@ -230,7 +221,7 @@ function defaultMemory(withConfig = false) {
 			memory.config = JSON.parse(JSON.stringify(defaultMemory.config));
 		}
 	} catch (error) {
-		console.error("nope-redis -> Cant default memory!", error);
+		console.error('nope-redis -> Cant default memory!', error);
 		return false;
 	}
 }
@@ -259,7 +250,7 @@ function roughSizeOfObject(object) {
 			if (unit_bytes === 1) {
 				return `${unit_bytes} byte`;
 			}
-			return "0 bytes";
+			return '0 bytes';
 		}
 		const objectList = [];
 		const stack = [object];
@@ -268,16 +259,13 @@ function roughSizeOfObject(object) {
 		while (stack.length) {
 			const value = stack.pop();
 
-			if (typeof value === "boolean") {
+			if (typeof value === 'boolean') {
 				bytes += 4;
-			} else if (typeof value === "string") {
+			} else if (typeof value === 'string') {
 				bytes += value.length * 2;
-			} else if (typeof value === "number") {
+			} else if (typeof value === 'number') {
 				bytes += 8;
-			} else if (
-				typeof value === "object" &&
-				objectList.indexOf(value) === -1
-			) {
+			} else if (typeof value === 'object' && objectList.indexOf(value) === -1) {
 				objectList.push(value);
 				for (const i in value) {
 					stack.push(value[i]);
@@ -286,17 +274,14 @@ function roughSizeOfObject(object) {
 		}
 		return formatSizeUnits(bytes);
 	} catch (error) {
-		console.error("nope-redis -> roughSizeOfObject error!", error);
-		return "Error !";
+		console.error('nope-redis -> roughSizeOfObject error!', error);
+		return 'Error !';
 	}
 }
 
 async function memoryStats() {
 	try {
-		const date = new Date();
-		memory.config.memoryStats[
-			`${`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}T${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`}`
-		] = roughSizeOfObject(memory.store);
+		memory.config.memoryStats[new kk_date().format('YYYY-MM-DDTHH:mm:ss')] = roughSizeOfObject(memory.store);
 		const keys = Object.keys(memory.config.memoryStats);
 		if (keys.length > 25) {
 			for (let i = 0; i < 12; i++) {
@@ -305,7 +290,7 @@ async function memoryStats() {
 			}
 		}
 	} catch (error) {
-		console.error("nope-redis -> error!", error);
+		console.error('nope-redis -> error!', error);
 		return false;
 	}
 }
@@ -314,20 +299,18 @@ async function memoryStats() {
  * deleter for expired key
  */
 function killer() {
+	const now = new kk_date().format('X');
 	memory.config.killerIsFinished = false;
 	for (const property in memory.store) {
-		if (
-			memory.store[`${property}`].expires_at < Math.floor(new Date() / 1000)
-		) {
+		if (memory.store[`${property}`].expires_at < now) {
 			delete memory.store[`${property}`];
 		}
 	}
 	memory.config.killerIsFinished = true;
-	memory.config.lastKiller = Math.floor(new Date() / 1000);
+	memory.config.lastKiller = now;
 	if (isMemoryStatsEnabled) {
-		if (Math.floor(new Date() / 1000) >= memory.config.nextMemoryStatsTime) {
-			memory.config.nextMemoryStatsTime =
-				Math.floor(new Date() / 1000) + 1 * 60 * 60;
+		if (now >= memory.config.nextMemoryStatsTime) {
+			memory.config.nextMemoryStatsTime = now + 1 * 60 * 60;
 			memoryStats();
 		}
 	}
@@ -339,11 +322,7 @@ module.exports.SERVICE_KILL = async () => {
 };
 
 module.exports.SERVICE_START = async () => {
-	if (
-		KILL_SERVICE === false &&
-		memory.config.status === false &&
-		memory.config.lastKiller === 0
-	) {
+	if (KILL_SERVICE === false && memory.config.status === false && memory.config.lastKiller === 0) {
 		return runner();
 	}
 	return false;
@@ -358,7 +337,7 @@ function runner() {
 			if (criticalError <= 3) {
 				memory.config.status = true;
 			} else {
-				console.error("nope-redis -> critic error, nope-redis not started");
+				console.error('nope-redis -> critic error, nope-redis not started');
 				return false;
 			}
 		}
@@ -373,13 +352,9 @@ function runner() {
 				if (memory.config.killerIsFinished) {
 					killer();
 				}
-				memory.config.nextKiller =
-					Math.floor(new Date() / 1000) + intervalSecond;
+				memory.config.nextKiller = new kk_date().format('X') + intervalSecond;
 			} catch (error) {
-				console.error(
-					"nope-redis -> Critical Error flushed all data! > ",
-					error,
-				);
+				console.error('nope-redis -> Critical Error flushed all data! > ', error);
 				clearInterval(runnerInterval);
 				defaultMemory(true);
 				criticalError++;
@@ -387,8 +362,8 @@ function runner() {
 			}
 		}, intervalSecond * 1000);
 	} catch (error) {
-		console.error("nope-redis -> Critical Error flushed all data! > ", error);
-		if (typeof runnerInterval !== "undefined") {
+		console.error('nope-redis -> Critical Error flushed all data! > ', error);
+		if (typeof runnerInterval !== 'undefined') {
 			clearInterval(runnerInterval);
 		}
 		defaultMemory(true);
