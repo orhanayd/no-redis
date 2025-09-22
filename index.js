@@ -235,7 +235,7 @@ function defaultMemory(withConfig = false) {
 function roughSizeOfObject(object) {
 	try {
 		function formatSizeUnits(unit_bytes) {
-			if (bytes >= 1073741824) {
+			if (unit_bytes >= 1073741824) {
 				return `${(unit_bytes / 1073741824).toFixed(2)} GB`;
 			}
 			if (unit_bytes >= 1048576) {
