@@ -4,7 +4,7 @@
 	"description": "Simple & Fast Node.JS memory caching",
 	"main": "index.js",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"test": "jest --forceExit"
 	},
 	"repository": {
 		"type": "git",
@@ -51,5 +51,8 @@
 	"homepage": "https://github.com/orhanayd/no-redis#readme",
 	"dependencies": {
 		"kk-date": "^2.0.3"
+	},
+	"devDependencies": {
+		"jest": "^30.1.3"
 	}
 }
