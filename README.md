@@ -310,6 +310,8 @@ nopeRedis.config({
 3. This continues until there's enough space for the new item
 4. The eviction count is tracked in statistics (`evictionCount`)
 
+**Performance Optimization**: LFU and TTL policies leverage the existing LRU map structure, checking only the first 20 least-recently-used items instead of scanning all keys. This avoids `Object.keys()` which creates a huge array in memory, providing true O(1) complexity without any memory allocation overhead.
+
 #### Example: Memory Pressure Handling
 
 ```javascript

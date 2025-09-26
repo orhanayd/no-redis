@@ -122,10 +122,10 @@ function estimateSize(value) {
 	return 16; // Default for other types
 }
 
-// Eviction function
+// Eviction function - optimized for performance
 function evictKeys() {
 	if (evictionPolicy === 'lru') {
-		// Evict least recently used
+		// Evict least recently used - O(1) operation
 		const lruKey = memory.lru.keys().next().value;
 		if (lruKey) {
 			const item = memory.store[lruKey];
@@ -136,35 +136,41 @@ function evictKeys() {
 			memory.lru.delete(lruKey);
 			memory.config.evictionCount++;
 		}
-	} else if (evictionPolicy === 'lfu') {
-		// Evict least frequently used
-		let minHits = Infinity;
+	} else if (evictionPolicy === 'lfu' || evictionPolicy === 'ttl') {
+		// For LFU and TTL, use LRU map to get candidates without Object.keys()
+		// This avoids creating a huge array and provides O(1) access
 		let keyToEvict = null;
-		for (const key in memory.store) {
-			if (memory.store[key].hit < minHits) {
-				minHits = memory.store[key].hit;
-				keyToEvict = key;
+		let compareValue = Infinity;
+
+		// Check first 20 items from LRU map (oldest accessed items)
+		let checked = 0;
+		for (const key of memory.lru.keys()) {
+			if (checked >= 20) break; // Limit sampling for performance
+
+			const item = memory.store[key];
+			if (!item) continue;
+
+			if (evictionPolicy === 'lfu') {
+				// Find item with lowest hit count
+				if (item.hit < compareValue) {
+					compareValue = item.hit;
+					keyToEvict = key;
+				}
+			} else { // TTL policy
+				// Find item expiring soonest
+				if (item.expires_at < compareValue) {
+					compareValue = item.expires_at;
+					keyToEvict = key;
+				}
 			}
+			checked++;
 		}
-		if (keyToEvict) {
-			const item = memory.store[keyToEvict];
-			if (item) {
-				currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
-			}
-			delete memory.store[keyToEvict];
-			memory.lru.delete(keyToEvict);
-			memory.config.evictionCount++;
+
+		// If no good candidate from sampling, just evict the oldest from LRU
+		if (!keyToEvict) {
+			keyToEvict = memory.lru.keys().next().value;
 		}
-	} else if (evictionPolicy === 'ttl') {
-		// Evict soonest to expire
-		let minExpiry = Infinity;
-		let keyToEvict = null;
-		for (const key in memory.store) {
-			if (memory.store[key].expires_at < minExpiry) {
-				minExpiry = memory.store[key].expires_at;
-				keyToEvict = key;
-			}
-		}
+
 		if (keyToEvict) {
 			const item = memory.store[keyToEvict];
 			if (item) {
