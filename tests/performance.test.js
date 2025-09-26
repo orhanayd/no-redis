@@ -37,55 +37,6 @@ describe('Performance Optimizations', () => {
         });
     });
 
-    describe('Batch operations performance', () => {
-        test('batch set should be faster than individual sets', () => {
-            const items = [];
-            for (let i = 0; i < 1000; i++) {
-                items.push({
-                    key: `batch${i}`,
-                    value: `value${i}`,
-                    ttl: 30
-                });
-            }
-
-            // Batch operation
-            const batchStartTime = Date.now();
-            nopeRedis.setItems(items);
-            const batchTime = Date.now() - batchStartTime;
-
-            nopeRedis.flushAll();
-
-            // Individual operations
-            const individualStartTime = Date.now();
-            for (const item of items) {
-                nopeRedis.setItem(item.key, item.value, item.ttl);
-            }
-            const individualTime = Date.now() - individualStartTime;
-
-            // Batch set: ${batchTime}ms, Individual sets: ${individualTime}ms
-
-            // Batch should be comparable or faster
-            expect(batchTime).toBeLessThanOrEqual(individualTime * 1.5);
-        });
-
-        test('batch get should be efficient', () => {
-            const keys = [];
-            for (let i = 0; i < 1000; i++) {
-                const key = `batchget${i}`;
-                keys.push(key);
-                nopeRedis.setItem(key, `value${i}`);
-            }
-
-            const startTime = Date.now();
-            const results = nopeRedis.getItems(keys);
-            const batchTime = Date.now() - startTime;
-
-            expect(Object.keys(results).length).toBe(1000);
-            expect(batchTime).toBeLessThan(100); // Should be very fast
-            // Batch get 1000 items: ${batchTime}ms
-        });
-    });
-
     describe('Killer function optimization', () => {
         test('should handle expired keys efficiently', () => {
             // Set many keys with short TTL

@@ -10,8 +10,7 @@ describe('Timing and Service Lifecycle Tests', () => {
         afterEach(async () => {
             // Always ensure service is killed after each test
             await nopeRedis.SERVICE_KILL();
-            // Wait for service to fully stop
-            await new Promise(resolve => setTimeout(resolve, 6000));
+            // Service stops immediately now, no wait needed
         });
 
         test('service auto-starts on module load', () => {
@@ -29,9 +28,7 @@ describe('Timing and Service Lifecycle Tests', () => {
             const killResult = await nopeRedis.SERVICE_KILL();
             expect(killResult).toBe(true);
 
-            // Wait for the kill to take effect (waits for next interval)
-            await new Promise(resolve => setTimeout(resolve, 6000));
-
+            // Service stops immediately
             stats = nopeRedis.stats();
             expect(stats.status).toBe(false);
 
@@ -49,7 +46,7 @@ describe('Timing and Service Lifecycle Tests', () => {
 
             const getValue = nopeRedis.getItem('test');
             expect(getValue).toBe('value');
-        }, 15000); // Extended timeout for this test
+        }); // No extended timeout needed
 
         test('service refuses to start multiple times', async () => {
             // Ensure service is running
@@ -70,15 +67,15 @@ describe('Timing and Service Lifecycle Tests', () => {
             const initialLastKiller = stats.lastKiller;
             const nextKiller = stats.nextKiller;
 
-            // Wait for killer to run
-            await new Promise(resolve => setTimeout(resolve, 6000));
+            // Wait for killer to run (5 second interval)
+            await new Promise(resolve => setTimeout(resolve, 5100));
 
             const newStats = nopeRedis.stats();
 
             // Killer should have run
             expect(newStats.lastKiller).toBeGreaterThan(initialLastKiller);
             expect(newStats.killerIsFinished).toBe(true);
-        }, 10000);
+        }, 7000);
     });
 
     describe('TTL Expiration Timing', () => {
@@ -90,7 +87,6 @@ describe('Timing and Service Lifecycle Tests', () => {
         afterEach(async () => {
             nopeRedis.flushAll();
             await nopeRedis.SERVICE_KILL();
-            await new Promise(resolve => setTimeout(resolve, 6000));
         });
 
         test('immediate expiration check', () => {
@@ -130,14 +126,14 @@ describe('Timing and Service Lifecycle Tests', () => {
                 expect(nopeRedis.getItem('ttl1')).toBe(null);
                 expect(nopeRedis.getItem('ttl2')).toBe('value2');
                 expect(nopeRedis.getItem('ttl3')).toBe('value3');
-            }, 1500);
+            }, 1000);
 
             // Check at 2.5 seconds
             setTimeout(() => {
                 expect(nopeRedis.getItem('ttl1')).toBe(null);
                 expect(nopeRedis.getItem('ttl2')).toBe(null);
                 expect(nopeRedis.getItem('ttl3')).toBe('value3');
-            }, 2500);
+            }, 2000);
 
             // Check at 3.5 seconds
             setTimeout(() => {
@@ -184,7 +180,6 @@ describe('Timing and Service Lifecycle Tests', () => {
         afterEach(async () => {
             nopeRedis.flushAll();
             await nopeRedis.SERVICE_KILL();
-            await new Promise(resolve => setTimeout(resolve, 6000));
         });
 
         test('expired keys cleanup by killer', async () => {
@@ -197,14 +192,14 @@ describe('Timing and Service Lifecycle Tests', () => {
             let stats = nopeRedis.stats();
             expect(stats.total).toBe(100);
 
-            // Wait for items to expire and killer to run
-            await new Promise(resolve => setTimeout(resolve, 7000));
+            // Wait for items to expire (1s) and killer to run (5s interval)
+            await new Promise(resolve => setTimeout(resolve, 6000));
 
             // All items should be cleaned up
             stats = nopeRedis.stats();
             expect(stats.total).toBe(0);
             expect(stats.killerIsFinished).toBe(true);
-        }, 10000);
+        }, 8000);
 
         test('killer runs every 5 seconds', async () => {
             const stats1 = nopeRedis.stats();
@@ -232,7 +227,7 @@ describe('Timing and Service Lifecycle Tests', () => {
             const diff = thirdKillerTime - secondKillerTime;
             expect(diff).toBeGreaterThanOrEqual(4);
             expect(diff).toBeLessThanOrEqual(6);
-        }, 15000);
+        }, 12000);
 
         test('killer handles mixed TTLs correctly', async () => {
             // Add items with various TTLs
@@ -248,13 +243,13 @@ describe('Timing and Service Lifecycle Tests', () => {
             expect(nopeRedis.getItem('medium')).toBe('value');
             expect(nopeRedis.getItem('long')).toBe('value');
 
-            // Wait for killer to clean up
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // Wait for killer to run once
+            await new Promise(resolve => setTimeout(resolve, 5100));
 
             // Check stats - should have 2 items left
             const stats = nopeRedis.stats();
             expect(stats.total).toBe(2);
-        }, 10000);
+        }, 8000);
     });
 
     describe('Async Size Calculation Timing', () => {
@@ -266,7 +261,6 @@ describe('Timing and Service Lifecycle Tests', () => {
         afterEach(async () => {
             nopeRedis.flushAll();
             await nopeRedis.SERVICE_KILL();
-            await new Promise(resolve => setTimeout(resolve, 6000));
         });
 
         test('size updates asynchronously', (done) => {
@@ -278,10 +272,6 @@ describe('Timing and Service Lifecycle Tests', () => {
             };
 
             nopeRedis.setItem('async', complexObj);
-
-            // Get initial stats (should have quick estimate)
-            const initialStats = nopeRedis.stats();
-            const initialSize = initialStats.currentMemorySize;
 
             // Wait for async size calculation
             setTimeout(() => {
@@ -328,7 +318,6 @@ describe('Timing and Service Lifecycle Tests', () => {
         afterEach(async () => {
             nopeRedis.flushAll();
             await nopeRedis.SERVICE_KILL();
-            await new Promise(resolve => setTimeout(resolve, 6000));
         });
 
         test('batch operations with TTL', (done) => {
@@ -382,7 +371,6 @@ describe('Timing and Service Lifecycle Tests', () => {
         afterEach(async () => {
             nopeRedis.flushAll();
             await nopeRedis.SERVICE_KILL();
-            await new Promise(resolve => setTimeout(resolve, 6000));
         });
 
         test('memory stats collection timing', async () => {

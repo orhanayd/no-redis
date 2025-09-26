@@ -17,7 +17,7 @@ describe('Service Management', () => {
 			await nopeRedis.SERVICE_KILL();
 
 			// Give time for service to stop
-			await new Promise((resolve) => setTimeout(resolve, 6000));
+			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			let stats = nopeRedis.stats();
 			expect(stats.status).toBe(false);
@@ -38,7 +38,7 @@ describe('Service Management', () => {
 			expect(killResult).toBe(true);
 
 			// Give it time to stop (needs to wait for next interval)
-			await new Promise((resolve) => setTimeout(resolve, 6000));
+			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			stats = nopeRedis.stats();
 			expect(stats.status).toBe(false);
@@ -48,7 +48,7 @@ describe('Service Management', () => {
 			await nopeRedis.SERVICE_KILL();
 
 			// Give it time to stop (needs 5+ seconds for interval to clear)
-			await new Promise((resolve) => setTimeout(resolve, 6000));
+			await new Promise((resolve) => setTimeout(resolve, 2000));
 
 			const setResult = nopeRedis.setItem('test', 'value');
 			expect(setResult).toBe(false);
