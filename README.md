@@ -14,7 +14,7 @@ A lightweight, high-performance in-memory caching library for Node.js that provi
 - 🛡️ **Self-Recovery**: Automatic recovery from critical errors (up to 3 retries)
 - 📈 **Statistics**: Built-in hit counters and memory usage tracking
 - 🎯 **Batch Operations**: Efficient bulk set/get/delete operations
-- 🔧 **Zero Dependencies**: No external runtime dependencies
+- 🔧 **Zero Dependencies**: No external runtime dependencies (kk-date removed for performance)
 
 ## Installation
 
@@ -90,7 +90,8 @@ Remove a key from the cache immediately.
 
 ```javascript
 const result = nopeRedis.deleteItem("key1");
-// Returns: true on success, false if key doesn't exist or service is stopped
+// Returns: true always (even if key doesn't exist), false only if service is stopped
+// Note: Always returns true for successful operation, regardless of key existence
 ```
 
 #### `itemStats(key)`
@@ -161,8 +162,8 @@ Configure global settings at runtime.
 nopeRedis.config({
     defaultTtl: 60,                    // Default TTL in seconds (default: 30)
     isMemoryStatsEnabled: true,        // Enable memory statistics (default: false)
-    maxMemorySize: 50,                // 50MB limit (default: 100MB)
-    evictionPolicy: 'lru'             // 'lru', 'lfu', or 'ttl' (default: 'lru')
+    maxMemorySize: 50,                 // Maximum memory in MB (default: 100MB)
+    evictionPolicy: 'lru'              // 'lru', 'lfu', or 'ttl' (default: 'lru')
 });
 // Returns: true on success
 ```
@@ -170,7 +171,7 @@ nopeRedis.config({
 **Configuration Options:**
 - `defaultTtl`: Default expiration time for keys without explicit TTL (seconds)
 - `isMemoryStatsEnabled`: Enables hourly memory statistics collection
-- `maxMemorySize`: Maximum memory size in MB before eviction starts
+- `maxMemorySize`: Maximum memory size in MB before eviction starts (Note: value is in MB, not bytes)
 - `evictionPolicy`: Strategy for removing keys when memory limit is reached
   - `'lru'`: Least Recently Used (removes least recently accessed keys)
   - `'lfu'`: Least Frequently Used (removes least frequently accessed keys)
@@ -198,11 +199,11 @@ const stats = nopeRedis.stats();
 //   memoryStats: {}                  // Historical memory data (if enabled)
 // }
 
-// Advanced options
+// Advanced options (defaults: showKeys=true, showTotal=true, showSize=false)
 const detailedStats = nopeRedis.stats({
-    showKeys: true,   // Include array of all keys
-    showTotal: true,  // Include total count (redundant, always included)
-    showSize: true    // Force recalculate memory usage
+    showKeys: true,   // Include array of all keys (default: true)
+    showTotal: true,  // Include total count (default: true)
+    showSize: false   // Force recalculate memory usage (default: false)
 });
 // Additional fields when showKeys: true
 // keys: ["key1", "key2", ...]
@@ -310,14 +311,14 @@ nopeRedis.config({
 3. This continues until there's enough space for the new item
 4. The eviction count is tracked in statistics (`evictionCount`)
 
-**Performance Optimization**: LFU and TTL policies leverage the existing LRU map structure, checking only the first 20 least-recently-used items instead of scanning all keys. This avoids `Object.keys()` which creates a huge array in memory, providing true O(1) complexity without any memory allocation overhead.
+**Performance Optimization**: LFU and TTL policies leverage the existing LRU map structure, checking only the first 20 least-recently-used items instead of scanning all keys. The eviction loop uses `memory.lru.size` instead of `Object.keys(memory.store).length` to check if store has items, avoiding array allocation and providing O(1) complexity.
 
 #### Example: Memory Pressure Handling
 
 ```javascript
 // Configure with 10MB limit and LRU policy
 nopeRedis.config({
-    maxMemorySize: 10,  // 10MB
+    maxMemorySize: 10,  // 10MB (Note: value is in MB, not bytes or KB)
     evictionPolicy: 'lru'
 });
 
@@ -462,6 +463,8 @@ Orhan Aydogdu ([orhanayd](https://github.com/orhanayd))
 - Optimized test performance (142s → 49s)
 - Enhanced TTL timing accuracy
 - Better memory eviction handling
+- Performance optimization: Replaced Object.keys() with memory.lru.size in hot paths
+- Removed kk-date dependency, using native Date.now() for better performance
 
 ### v1.3.6
 - Added pre-identified expired keys pool

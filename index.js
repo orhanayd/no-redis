@@ -156,7 +156,8 @@ function evictKeys() {
 					compareValue = item.hit;
 					keyToEvict = key;
 				}
-			} else { // TTL policy
+			} else {
+				// TTL policy
 				// Find item expiring soonest
 				if (item.expires_at < compareValue) {
 					compareValue = item.expires_at;
@@ -208,8 +209,8 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 			}
 		}
 
-		// Quick eviction check
-		while (currentMemorySize + quickSizeEstimate > maxMemorySize && Object.keys(memory.store).length > 0) {
+		// Quick eviction check - use memory.lru.size instead of Object.keys()
+		while (currentMemorySize + quickSizeEstimate > maxMemorySize && memory.lru.size > 0) {
 			evictKeys();
 		}
 
@@ -495,13 +496,13 @@ module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: fa
 			result.memoryStats = memory.config.memoryStats;
 		}
 		if (config.showTotal) {
-			result.total = Object.keys(memory.store).length;
+			result.total = memory.lru.size;
 		}
 		if (config.showSize) {
 			result.size = formatSizeUnits(currentMemorySize);
 		}
 		if (config.showKeys) {
-			result.keys = Object.keys(memory.store);
+			result.keys = Array.from(memory.lru.keys());
 		}
 		return result;
 	} catch (error) {

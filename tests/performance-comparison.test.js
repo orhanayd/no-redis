@@ -134,7 +134,7 @@ describe('Performance Comparison: Sync vs Async Size Calculation', () => {
 		}
 
 		// Initial memory size (quick estimates)
-		const initialStats = nopeRedis.stats();
+		nopeRedis.stats();
 
 		// Wait for async calculations to complete
 		setTimeout(() => {
@@ -156,7 +156,7 @@ describe('Performance Comparison: Sync vs Async Size Calculation', () => {
 	test('eviction still works with async size calculation', () => {
 		// Set very small memory limit
 		nopeRedis.config({
-			maxMemorySize: 10 * 1024, // 10KB
+			maxMemorySize: 0.01, // 10KB in MB
 			evictionPolicy: 'lru',
 		});
 

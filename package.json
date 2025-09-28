@@ -49,10 +49,9 @@
 		"url": "https://github.com/orhanayd/no-redis/issues"
 	},
 	"homepage": "https://github.com/orhanayd/no-redis#readme",
-	"dependencies": {
-		"kk-date": "^2.0.3"
-	},
+	"dependencies": {},
 	"devDependencies": {
-		"jest": "^30.1.3"
+		"jest": "^30.1.3",
+		"@biomejs/biome": "2.2.3"
 	}
 }
