@@ -14,7 +14,7 @@ A lightweight, high-performance in-memory caching library for Node.js that provi
 - 🛡️ **Self-Recovery**: Automatic recovery from critical errors (up to 3 retries)
 - 📈 **Statistics**: Built-in hit counters and memory usage tracking
 - 🎯 **Batch Operations**: Efficient bulk set/get/delete operations
-- 🔧 **Zero Dependencies**: No external runtime dependencies (kk-date removed for performance)
+- 🔧 **Minimal Dependencies**: Only kk-date (v4.0.2) for robust date/time handling
 
 ## Installation
 
@@ -458,13 +458,14 @@ Orhan Aydogdu ([orhanayd](https://github.com/orhanayd))
 
 ## Changelog
 
-### v1.3.7
+### v1.3.8
+- Updated kk-date to v4.0.2 for latest features and performance
 - Improved SERVICE_KILL to run cleanup immediately
 - Optimized test performance (142s → 49s)
 - Enhanced TTL timing accuracy
 - Better memory eviction handling
 - Performance optimization: Replaced Object.keys() with memory.lru.size in hot paths
-- Removed kk-date dependency, using native Date.now() for better performance
+- Uses kk-date for consistent date/time handling across environments
 
 ### v1.3.6
 - Added pre-identified expired keys pool

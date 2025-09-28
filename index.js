@@ -1,8 +1,12 @@
+// External dependencies
+const KkDate = require('kk-date');
+
 /**
- * Get current Unix timestamp
+ * Get current Unix timestamp using kk-date
  */
 function getTimestamp() {
-	return Math.floor(Date.now() / 1000);
+	const d = new KkDate();
+	return Math.floor(d.getTime() / 1000);
 }
 
 let defaultTtl = 30;
