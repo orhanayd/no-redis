@@ -51,7 +51,7 @@
 	},
 	"homepage": "https://github.com/orhanayd/no-redis#readme",
 	"dependencies": {
-		"kk-date": "^4.0.2"
+		"kk-date": "^4.0.3"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.2.3",
