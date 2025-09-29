@@ -198,7 +198,8 @@ nopeRedis.config({
     defaultTtl: 60,                    // Default TTL in seconds (default: 30)
     isMemoryStatsEnabled: true,        // Enable memory statistics (default: false)
     maxMemorySize: 50,                 // Maximum memory in MB (default: 100MB)
-    evictionPolicy: 'lru'              // 'lru', 'lfu', or 'ttl' (default: 'lru')
+    evictionPolicy: 'lru',             // 'lru', 'lfu', or 'ttl' (default: 'lru')
+    maxChecksPerCycle: 50000           // Max keys to check per cleanup cycle (default: 100000)
 });
 // Returns: true on success, false on error
 ```
@@ -211,6 +212,7 @@ nopeRedis.config({
   - `'lru'`: Least Recently Used (removes least recently accessed keys)
   - `'lfu'`: Least Frequently Used (removes least frequently accessed keys)
   - `'ttl'`: Time-To-Live (removes keys closest to expiration)
+- `maxChecksPerCycle`: Maximum number of keys to check for expiration in each cleanup cycle (useful for performance tuning with large datasets)
 
 ### Statistics
 
