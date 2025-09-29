@@ -138,16 +138,14 @@ describe('Performance Comparison: Sync vs Async Size Calculation', () => {
 
 		// Wait for async calculations to complete
 		setTimeout(() => {
-			const finalStats = nopeRedis.stats();
+			const finalStats = nopeRedis.stats({ showSize: true });
 
 			// Memory size updates asynchronously
-			// Initial: ${initialStats.currentMemorySize}
-			// Final: ${finalStats.currentMemorySize}
 			// Items: ${finalStats.total}
 
 			// Size should be updated and more accurate
 			expect(finalStats.total).toBe(count);
-			expect(finalStats.currentMemorySize).not.toBe('0 bytes');
+			expect(finalStats.size).not.toBe('0 MB');
 
 			done();
 		}, 500);

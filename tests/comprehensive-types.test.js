@@ -476,9 +476,9 @@ describe('Comprehensive Data Types Tests', () => {
 			nopeRedis.setItem('testObject', { a: 1, b: 2 });
 
 			const stats = nopeRedis.stats({ showSize: true });
-			expect(stats.currentMemorySize).toBeDefined();
-			expect(typeof stats.currentMemorySize).toBe('string');
-			expect(stats.currentMemorySize).not.toBe('0 bytes');
+			expect(stats.size).toBeDefined();
+			expect(typeof stats.size).toBe('string');
+			expect(stats.size).not.toBe('0 MB');
 		});
 	});
 });

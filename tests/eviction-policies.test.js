@@ -137,19 +137,19 @@ describe('Eviction Policies', () => {
 
 	describe('Memory size tracking', () => {
 		test('should track current memory size', () => {
-			const stats1 = nopeRedis.stats();
-			expect(stats1.currentMemorySize).toBeDefined();
+			const stats1 = nopeRedis.stats({ showSize: true });
+			expect(stats1.size).toBeDefined();
 
 			nopeRedis.setItem('test1', 'x'.repeat(100));
 			nopeRedis.setItem('test2', 'y'.repeat(200));
 
-			const stats2 = nopeRedis.stats();
-			expect(stats2.currentMemorySize).toBeDefined();
+			const stats2 = nopeRedis.stats({ showSize: true });
+			expect(stats2.size).toBeDefined();
 
 			// Flush should reset memory size
 			nopeRedis.flushAll();
-			const stats3 = nopeRedis.stats();
-			expect(stats3.currentMemorySize).toBe('0 MB');
+			const stats3 = nopeRedis.stats({ showSize: true });
+			expect(stats3.size).toBe('0 MB');
 		});
 	});
 });

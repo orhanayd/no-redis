@@ -227,24 +227,26 @@ const stats = nopeRedis.stats();
 //   status: true,                    // Service running status
 //   total: 150,                      // Total number of keys
 //   totalHits: 1250,                 // Total cache hits across all keys
-//   currentMemorySize: "1.5 MB",     // Human-readable memory usage
 //   evictionCount: 10,               // Number of evicted keys
 //   killerIsFinished: true,          // Cleanup process status
 //   lastKiller: 1234567890,          // Last cleanup timestamp
 //   nextKiller: 1234567895,          // Next cleanup timestamp
 //   isMemoryStatsEnabled: false,     // Memory stats collection status
 //   nextMemoryStatsTime: 0,          // Next stats collection time
-//   memoryStats: {}                  // Historical memory data (if enabled)
+//   memoryStats: {},                 // Historical memory data (if enabled)
+//   maxMemorySize: "100.00 MB"       // Maximum memory limit
 // }
 
 // Advanced options (defaults: showKeys=true, showTotal=true, showSize=false)
 const detailedStats = nopeRedis.stats({
     showKeys: true,   // Include array of all keys (default: true)
     showTotal: true,  // Include total count (default: true)
-    showSize: false   // Force recalculate memory usage (default: false)
+    showSize: true    // Include current memory usage (default: false)
 });
 // Additional fields when showKeys: true
 // keys: ["key1", "key2", ...]
+// Additional fields when showSize: true
+// size: "1.5 MB"  // Current memory usage
 ```
 
 ### Service Management
