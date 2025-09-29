@@ -14,6 +14,7 @@ A lightweight, high-performance in-memory caching library for Node.js that provi
 - 🛡️ **Self-Recovery**: Automatic recovery from critical errors (up to 3 retries)
 - 📈 **Statistics**: Built-in hit counters and memory usage tracking
 - 🎯 **Batch Operations**: Efficient bulk set/get/delete operations
+- 📘 **TypeScript Support**: Full TypeScript definitions included
 - 🔧 **Minimal Dependencies**: Only kk-date (v4.0.2) for robust date/time handling
 
 ## Installation
@@ -28,6 +29,7 @@ npm install nope-redis
 
 ## Quick Start
 
+### JavaScript
 ```javascript
 const nopeRedis = require("nope-redis");
 
@@ -52,6 +54,35 @@ const values = nopeRedis.getItems(["item1", "item2"]);
 console.log(values); // { item1: "value1", item2: { nested: "data" } }
 ```
 
+### TypeScript
+```typescript
+import nopeRedis = require("nope-redis");
+
+interface User {
+  name: string;
+  age: number;
+}
+
+// Store typed data
+nopeRedis.setItem<User>("user:1", { name: "John", age: 30 }, 10);
+
+// Retrieve with type safety
+const user = nopeRedis.getItem<User>("user:1");
+if (user) {
+  console.log(user.name); // TypeScript knows this is a User
+}
+
+// Batch operations with types
+const items = [
+  { key: "user:2", value: { name: "Jane", age: 25 }, ttl: 30 },
+  { key: "user:3", value: { name: "Bob", age: 35 }, ttl: 60 }
+];
+nopeRedis.setItems(items);
+
+// Get multiple items with type
+const users = nopeRedis.getItems<User>(["user:1", "user:2", "user:3"]);
+```
+
 ## API Reference
 
 ### Basic Operations
@@ -74,12 +105,14 @@ nopeRedis.setItem("array", [1, 2, 3], 45);
 ```
 
 #### `getItem(key)`
-Retrieve a cached value. Returns `null` if not found or expired.
+Retrieve a cached value. Returns `null` if not found or expired, `false` if service is stopped.
 
 ```javascript
 const value = nopeRedis.getItem("key1");
 if (value === null) {
     // Key doesn't exist or has expired
+} else if (value === false) {
+    // Service is stopped
 }
 
 // Accessing a key updates its access count and LRU position
@@ -104,7 +137,7 @@ const stats = nopeRedis.itemStats("key1");
 //   remaining_seconds: 25,       // Seconds until expiration
 //   hit: 5                      // Number of times accessed
 // }
-// Returns: null if key doesn't exist
+// Returns: null if key doesn't exist, false if service is stopped
 ```
 
 #### `flushAll()`
@@ -129,6 +162,7 @@ const items = [
 ];
 const results = nopeRedis.setItems(items);
 // Returns: [true, true, true] - success status for each item
+// Returns false if service is stopped or error occurs
 ```
 
 #### `getItems(keys)`
@@ -142,6 +176,7 @@ const values = nopeRedis.getItems(["item1", "item2", "item3"]);
 //   item3: [1, 2, 3]
 // }
 // Non-existent or expired keys return null
+// Returns false if service is stopped or error occurs
 ```
 
 #### `deleteItems(keys)`
@@ -149,7 +184,7 @@ Delete multiple items in a single operation.
 
 ```javascript
 const result = nopeRedis.deleteItems(["item1", "item2", "item3"]);
-// Returns: true if operation succeeded
+// Returns: true if operation succeeded, false if service is stopped
 // Skips non-string keys silently
 ```
 
@@ -165,7 +200,7 @@ nopeRedis.config({
     maxMemorySize: 50,                 // Maximum memory in MB (default: 100MB)
     evictionPolicy: 'lru'              // 'lru', 'lfu', or 'ttl' (default: 'lru')
 });
-// Returns: true on success
+// Returns: true on success, false on error
 ```
 
 **Configuration Options:**
@@ -185,6 +220,7 @@ Get comprehensive cache statistics.
 ```javascript
 const stats = nopeRedis.stats();
 // Basic stats (no parameters)
+// Returns false if error occurs
 // Returns: {
 //   status: true,                    // Service running status
 //   total: 150,                      // Total number of keys
@@ -358,8 +394,8 @@ console.log(`Evicted ${stats.evictionCount} keys to maintain memory limit`);
 | Memory Limits | ✅ | ❌ | ❌ | ✅ |
 | Statistics | Comprehensive | Basic | Basic | Basic |
 | Auto-Recovery | ✅ | ❌ | ❌ | ❌ |
-| Zero Dependencies | ✅ | ❌ | ✅ | ✅ |
-| TypeScript Types | ❌ | ✅ | ❌ | ✅ |
+| Minimal Dependencies | ✅ (1 dep) | ❌ | ✅ | ✅ |
+| TypeScript Types | ✅ | ✅ | ❌ | ✅ |
 
 ## Advanced Features
 
@@ -409,7 +445,7 @@ npm test -- tests/basic-operations.test.js
 npx jest --coverage
 ```
 
-Test coverage: ~97.5% with 120+ test cases covering:
+Test coverage: ~97% with 120+ test cases covering:
 - Basic CRUD operations
 - Batch operations
 - Service lifecycle management
@@ -457,6 +493,12 @@ Orhan Aydogdu ([orhanayd](https://github.com/orhanayd))
 - [Issue Tracker](https://github.com/orhanayd/no-redis/issues)
 
 ## Changelog
+
+### v2.0.0
+- **TypeScript Support**: Added full TypeScript definitions
+- Complete type safety with interfaces and generics
+- Support for CommonJS module imports
+- Comprehensive type coverage for all functions
 
 ### v1.3.8
 - Updated kk-date to v4.0.2 for latest features and performance
