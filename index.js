@@ -497,7 +497,6 @@ module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: fa
 			isMemoryStatsEnabled,
 			evictionCount: memory.config.evictionCount,
 			evictionPolicy,
-			currentMemorySize: formatSizeUnits(currentMemorySize),
 			maxMemorySize: formatSizeUnits(maxMemorySize),
 		};
 		if (isMemoryStatsEnabled) {
