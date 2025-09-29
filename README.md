@@ -241,12 +241,10 @@ const stats = nopeRedis.stats();
 const detailedStats = nopeRedis.stats({
     showKeys: true,   // Include array of all keys (default: true)
     showTotal: true,  // Include total count (default: true)
-    showSize: true    // Include current memory usage (default: false)
 });
 // Additional fields when showKeys: true
 // keys: ["key1", "key2", ...]
 // Additional fields when showSize: true
-// size: "1.5 MB"  // Current memory usage
 ```
 
 ### Service Management
