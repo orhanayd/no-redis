@@ -13,6 +13,8 @@ declare namespace nopeRedis {
 		maxMemorySize?: number;
 		/** Eviction policy: 'lru', 'lfu', or 'ttl' (default: 'lru') */
 		evictionPolicy?: 'lru' | 'lfu' | 'ttl';
+		/** Maximum keys to check per cleanup cycle (default: 100000) */
+		maxChecksPerCycle?: number;
 	}
 
 	/**

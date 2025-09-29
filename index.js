@@ -15,6 +15,7 @@ let criticalError = 0;
 let KILL_SERVICE = false;
 const intervalSecond = 5;
 let runnerInterval = null;
+let maxChecksPerCycle = 100000; // Maximum keys to check per cleanup cycle
 
 // Performance optimizations
 let maxMemorySize = 100; // 100MB default (in MB) limit
@@ -45,6 +46,7 @@ const memory = {
  * @param {number} [options.defaultTtl=30] - Default TTL in seconds for keys without explicit TTL
  * @param {number} [options.maxMemorySize=100] - Maximum memory size in MB (default 100MB)
  * @param {'lru'|'lfu'|'ttl'} [options.evictionPolicy='lru'] - Eviction policy when memory limit is reached
+ * @param {number} [options.maxChecksPerCycle=100000] - Maximum keys to check per cleanup cycle
  * @returns {boolean} true on success, false on error
  */
 module.exports.config = (options = {}) => {
@@ -68,6 +70,9 @@ module.exports.config = (options = {}) => {
 			}
 			if (options.evictionPolicy && ['lru', 'lfu', 'ttl'].includes(options.evictionPolicy)) {
 				evictionPolicy = options.evictionPolicy;
+			}
+			if (typeof options.maxChecksPerCycle === 'number' && options.maxChecksPerCycle > 0) {
+				maxChecksPerCycle = options.maxChecksPerCycle;
 			}
 			return true;
 		}
@@ -611,7 +616,6 @@ function killer() {
 
 	// Batch process with early termination
 	const keysToDelete = [];
-	const maxChecksPerCycle = 100000; // Limit checks per cycle
 	let checked = 0;
 
 	for (const property in memory.store) {
