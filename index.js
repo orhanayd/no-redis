@@ -611,7 +611,7 @@ function killer() {
 
 	// Batch process with early termination
 	const keysToDelete = [];
-	const maxChecksPerCycle = 1000; // Limit checks per cycle
+	const maxChecksPerCycle = 100000; // Limit checks per cycle
 	let checked = 0;
 
 	for (const property in memory.store) {
