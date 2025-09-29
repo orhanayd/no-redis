@@ -104,3 +104,4 @@ dist
 .tern-port
 .eslintrc.js
 yarn.lock
+CLAUDE.md
