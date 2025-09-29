@@ -13,6 +13,8 @@ declare namespace nopeRedis {
 		maxMemorySize?: number;
 		/** Eviction policy: 'lru', 'lfu', or 'ttl' (default: 'lru') */
 		evictionPolicy?: 'lru' | 'lfu' | 'ttl';
+		/** Maximum keys to check per cleanup cycle (default: 100000) */
+		maxChecksPerCycle?: number;
 	}
 
 	/**
@@ -21,12 +23,12 @@ declare namespace nopeRedis {
 	export interface Stats {
 		/** Service running status */
 		status: boolean;
-		/** Total number of keys */
-		total: number;
+		/** Total number of keys (if showTotal is true) */
+		total?: number;
 		/** Total cache hits across all keys */
 		totalHits: number;
-		/** Human-readable memory usage */
-		currentMemorySize: string;
+		/** Human-readable current memory usage (if showSize is true or isMemoryStatsEnabled is true) */
+		size?: string;
 		/** Number of evicted keys */
 		evictionCount: number;
 		/** Cleanup process status */
@@ -37,11 +39,19 @@ declare namespace nopeRedis {
 		nextKiller: number;
 		/** Memory stats collection status */
 		isMemoryStatsEnabled: boolean;
-		/** Next stats collection time */
-		nextMemoryStatsTime: number;
-		/** Historical memory data (if enabled) */
-		memoryStats: Record<string, { size: number; count: number }>;
-		/** Array of all keys (optional) */
+		/** Next stats collection time (if memory stats enabled) */
+		nextMemoryStatsTime?: number;
+		/** Historical memory data (if memory stats enabled) */
+		memoryStats?: Record<string, string>;
+		/** Maximum memory limit */
+		maxMemorySize: string;
+		/** Default TTL in seconds */
+		defaultTtl: number;
+		/** Current eviction policy */
+		evictionPolicy: 'lru' | 'lfu' | 'ttl';
+		/** Number of critical errors */
+		criticalError: number;
+		/** Array of all keys (if showKeys is true) */
 		keys?: string[];
 	}
 

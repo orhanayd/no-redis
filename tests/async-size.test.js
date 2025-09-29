@@ -56,11 +56,11 @@ describe('Async Size Calculation Performance', () => {
 
 		// Wait for async size calculation
 		setTimeout(() => {
-			const finalStats = nopeRedis.stats();
+			const finalStats = nopeRedis.stats({ showSize: true });
 
 			// Size should be updated after async calculation
-			expect(finalStats.currentMemorySize).toBeDefined();
-			expect(finalStats.currentMemorySize).not.toBe('0 bytes');
+			expect(finalStats.size).toBeDefined();
+			expect(finalStats.size).not.toBe('0 MB');
 
 			done();
 		}, 100);
@@ -82,13 +82,13 @@ describe('Async Size Calculation Performance', () => {
 
 		// Wait for all async calculations
 		setTimeout(() => {
-			const stats = nopeRedis.stats();
+			const stats = nopeRedis.stats({ showSize: true });
 
 			// All items should be stored
 			expect(stats.total).toBe(100);
 
 			// Memory size should be reasonable
-			expect(stats.currentMemorySize).toBeDefined();
+			expect(stats.size).toBeDefined();
 
 			// Verify items are retrievable
 			for (let i = 0; i < 100; i++) {

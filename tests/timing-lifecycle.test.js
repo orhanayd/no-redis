@@ -275,8 +275,8 @@ describe('Timing and Service Lifecycle Tests', () => {
 
 			// Wait for async size calculation
 			setTimeout(() => {
-				const finalStats = nopeRedis.stats();
-				const finalSize = finalStats.currentMemorySize;
+				const finalStats = nopeRedis.stats({ showSize: true });
+				const finalSize = finalStats.size;
 
 				// Size should be updated
 				expect(finalSize).toBeDefined();
@@ -294,8 +294,8 @@ describe('Timing and Service Lifecycle Tests', () => {
 
 			// Wait for all async calculations
 			setTimeout(() => {
-				const stats = nopeRedis.stats();
-				expect(stats.currentMemorySize).not.toBe('0 bytes');
+				const stats = nopeRedis.stats({ showSize: true });
+				expect(stats.size).not.toBe('0 MB');
 
 				// Should only have one key
 				expect(stats.total).toBe(1);

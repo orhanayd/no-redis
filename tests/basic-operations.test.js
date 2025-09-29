@@ -167,7 +167,7 @@ describe('Basic Operations', () => {
 			expect(stats).toHaveProperty('totalHits');
 			expect(stats).toHaveProperty('evictionCount');
 			expect(stats).toHaveProperty('evictionPolicy');
-			expect(stats).toHaveProperty('currentMemorySize');
+			// Size is not shown by default unless showSize:true or isMemoryStatsEnabled:true
 			expect(stats).toHaveProperty('maxMemorySize');
 		});
 

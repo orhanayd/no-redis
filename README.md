@@ -198,7 +198,8 @@ nopeRedis.config({
     defaultTtl: 60,                    // Default TTL in seconds (default: 30)
     isMemoryStatsEnabled: true,        // Enable memory statistics (default: false)
     maxMemorySize: 50,                 // Maximum memory in MB (default: 100MB)
-    evictionPolicy: 'lru'              // 'lru', 'lfu', or 'ttl' (default: 'lru')
+    evictionPolicy: 'lru',             // 'lru', 'lfu', or 'ttl' (default: 'lru')
+    maxChecksPerCycle: 50000           // Max keys to check per cleanup cycle (default: 100000)
 });
 // Returns: true on success, false on error
 ```
@@ -211,6 +212,7 @@ nopeRedis.config({
   - `'lru'`: Least Recently Used (removes least recently accessed keys)
   - `'lfu'`: Least Frequently Used (removes least frequently accessed keys)
   - `'ttl'`: Time-To-Live (removes keys closest to expiration)
+- `maxChecksPerCycle`: Maximum number of keys to check for expiration in each cleanup cycle (useful for performance tuning with large datasets)
 
 ### Statistics
 
@@ -225,24 +227,24 @@ const stats = nopeRedis.stats();
 //   status: true,                    // Service running status
 //   total: 150,                      // Total number of keys
 //   totalHits: 1250,                 // Total cache hits across all keys
-//   currentMemorySize: "1.5 MB",     // Human-readable memory usage
 //   evictionCount: 10,               // Number of evicted keys
 //   killerIsFinished: true,          // Cleanup process status
 //   lastKiller: 1234567890,          // Last cleanup timestamp
 //   nextKiller: 1234567895,          // Next cleanup timestamp
 //   isMemoryStatsEnabled: false,     // Memory stats collection status
 //   nextMemoryStatsTime: 0,          // Next stats collection time
-//   memoryStats: {}                  // Historical memory data (if enabled)
+//   memoryStats: {},                 // Historical memory data (if enabled)
+//   maxMemorySize: "100.00 MB"       // Maximum memory limit
 // }
 
 // Advanced options (defaults: showKeys=true, showTotal=true, showSize=false)
 const detailedStats = nopeRedis.stats({
     showKeys: true,   // Include array of all keys (default: true)
     showTotal: true,  // Include total count (default: true)
-    showSize: false   // Force recalculate memory usage (default: false)
 });
 // Additional fields when showKeys: true
 // keys: ["key1", "key2", ...]
+// Additional fields when showSize: true
 ```
 
 ### Service Management

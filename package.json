@@ -1,6 +1,6 @@
 {
 	"name": "nope-redis",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"description": "Simple & Fast Node.JS memory caching",
 	"main": "index.js",
 	"types": "index.d.ts",
@@ -51,7 +51,7 @@
 	},
 	"homepage": "https://github.com/orhanayd/no-redis#readme",
 	"dependencies": {
-		"kk-date": "^4.0.2"
+		"kk-date": "^4.0.3"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.2.3",
