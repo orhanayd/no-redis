@@ -1,6 +1,6 @@
 {
 	"name": "nope-redis",
-	"version": "2.0.1",
+	"version": "2.0.2",
 	"description": "Simple & Fast Node.JS memory caching",
 	"main": "index.js",
 	"types": "index.d.ts",

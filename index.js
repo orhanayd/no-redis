@@ -97,8 +97,8 @@ function estimateSize(value) {
 	if (typeof value === 'string') return value.length * 2;
 	if (typeof value === 'number') return 8;
 	if (typeof value === 'object' && value !== null) {
-		// Check for Buffer
-		if (Buffer.isBuffer(value)) {
+		// Check for Buffer (Node.js only)
+		if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
 			return value.length;
 		}
 		// Check for TypedArray
@@ -204,7 +204,7 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 		if (typeof value === 'string') quickSizeEstimateBytes += value.length * 2;
 		else if (typeof value === 'number') quickSizeEstimateBytes += 8;
 		else if (typeof value === 'boolean') quickSizeEstimateBytes += 4;
-		else if (Buffer.isBuffer(value)) quickSizeEstimateBytes += value.length;
+		else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) quickSizeEstimateBytes += value.length;
 		else if (ArrayBuffer.isView(value)) quickSizeEstimateBytes += value.byteLength;
 		else quickSizeEstimateBytes += 100; // Default estimate for objects
 
@@ -484,8 +484,16 @@ module.exports.flushAll = () => {
  * @param {boolean} [options.showSize=false] - Force recalculate memory size
  * @returns {object} Statistics object with status, counts, memory usage, and configuration
  */
-module.exports.stats = (config = { showKeys: true, showTotal: true, showSize: false }) => {
+module.exports.stats = (options = {}) => {
 	try {
+		// Merge with defaults
+		const config = {
+			showKeys: true,
+			showTotal: true,
+			showSize: false,
+			...options
+		};
+
 		const result = {
 			status: memory.config.status,
 			killerIsFinished: memory.config.killerIsFinished,
