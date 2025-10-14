@@ -131,6 +131,28 @@ function estimateSize(value) {
 	return 16; // Default for other types
 }
 
+/**
+ * Calculate accurate size asynchronously (browser and Node.js compatible)
+ * Uses setTimeout instead of setImmediate for cross-platform compatibility
+ *
+ * @param {string} key - The key to update size for
+ * @param {*} value - The value to calculate size for
+ */
+function calculateAccurateSizeAsync(key, value) {
+	setTimeout(() => {
+		try {
+			if (memory.store[key]) {
+				const accurateSize = (estimateSize(value) + 20) / (1024 * 1024); // Convert to MB
+				const sizeDiff = accurateSize - memory.store[key].size;
+				memory.store[key].size = accurateSize;
+				currentMemorySize += sizeDiff;
+			}
+		} catch (_e) {
+			// Ignore errors in async size calculation
+		}
+	}, 0);
+}
+
 // Eviction function - optimized for performance
 function evictKeys() {
 	if (evictionPolicy === 'lru') {
@@ -243,18 +265,7 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 		memory.lru.set(key, true);
 
 		// Calculate accurate size asynchronously
-		setImmediate(() => {
-			try {
-				if (memory.store[key]) {
-					const accurateSize = (estimateSize(value) + 20) / (1024 * 1024); // Convert to MB
-					const sizeDiff = accurateSize - memory.store[key].size;
-					memory.store[key].size = accurateSize;
-					currentMemorySize += sizeDiff;
-				}
-			} catch (_e) {
-				// Ignore errors in async size calculation
-			}
-		});
+		calculateAccurateSizeAsync(key, value);
 
 		return true;
 	} catch (error) {
