@@ -87,7 +87,7 @@ declare namespace nopeRedis {
 		showKeys?: boolean;
 		/** Include total count (default: true) */
 		showTotal?: boolean;
-		/** Force recalculate memory usage (default: false) */
+		/** Include current memory usage in stats output (default: false) */
 		showSize?: boolean;
 	}
 

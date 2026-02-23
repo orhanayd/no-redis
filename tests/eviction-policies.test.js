@@ -52,9 +52,15 @@ describe('Eviction Policies', () => {
 				nopeRedis.setItem(`new${i}`, largeData);
 			}
 
-			// old1 and old3 should be evicted first, old2 should remain longer
 			const stats = nopeRedis.stats();
 			expect(stats.evictionCount).toBeGreaterThan(0);
+
+			// old1 should be evicted first (least recently used)
+			const old1 = nopeRedis.getItem('old1');
+			expect(old1).toBeNull();
+
+			// old2 was accessed recently, so it should survive longer than old1
+			// (though it may also be evicted if memory is very tight)
 		});
 	});
 
@@ -84,9 +90,12 @@ describe('Eviction Policies', () => {
 				nopeRedis.setItem(`new${i}`, largeData);
 			}
 
-			// freq1 should be evicted first (0 hits), then freq3 (1 hit)
 			const stats = nopeRedis.stats();
 			expect(stats.evictionCount).toBeGreaterThan(0);
+
+			// freq1 had 0 hits, so it should be evicted first
+			const freq1 = nopeRedis.getItem('freq1');
+			expect(freq1).toBeNull();
 		});
 	});
 
@@ -108,9 +117,12 @@ describe('Eviction Policies', () => {
 				nopeRedis.setItem(`new${i}`, largeData, 120);
 			}
 
-			// 'short' should be evicted first due to shortest TTL
 			const stats = nopeRedis.stats();
 			expect(stats.evictionCount).toBeGreaterThan(0);
+
+			// 'short' had the shortest TTL, so it should be evicted first
+			const short = nopeRedis.getItem('short');
+			expect(short).toBeNull();
 		});
 	});
 

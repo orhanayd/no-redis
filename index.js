@@ -23,6 +23,13 @@ let currentMemorySize = 0;
 let evictionPolicy = 'lru'; // 'lru', 'lfu', 'ttl'
 const expiredKeysPool = new Set();
 
+function subtractMemorySize(size) {
+	currentMemorySize -= size;
+	if (currentMemorySize < 0 || Number.isNaN(currentMemorySize)) {
+		currentMemorySize = 0;
+	}
+}
+
 const memory = {
 	config: {
 		status: false,
@@ -67,6 +74,9 @@ module.exports.config = (options = {}) => {
 			}
 			if (typeof options.maxMemorySize === 'number' && options.maxMemorySize > 0) {
 				maxMemorySize = options.maxMemorySize;
+				while (currentMemorySize > maxMemorySize && memory.lru.size > 0) {
+					evictKeys();
+				}
 			}
 			if (options.evictionPolicy && ['lru', 'lfu', 'ttl'].includes(options.evictionPolicy)) {
 				evictionPolicy = options.evictionPolicy;
@@ -97,6 +107,9 @@ function estimateSize(value) {
 	if (typeof value === 'string') return value.length * 2;
 	if (typeof value === 'number') return 8;
 	if (typeof value === 'object' && value !== null) {
+		// Check for Map and Set
+		if (value instanceof Map) return value.size * 100;
+		if (value instanceof Set) return value.size * 50;
 		// Check for Buffer (Node.js only)
 		if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
 			return value.length;
@@ -139,13 +152,15 @@ function estimateSize(value) {
  * @param {*} value - The value to calculate size for
  */
 function calculateAccurateSizeAsync(key, value) {
+	const entryRef = memory.store[key];
 	setTimeout(() => {
 		try {
-			if (memory.store[key]) {
+			if (memory.store[key] === entryRef) {
 				const accurateSize = (estimateSize(value) + 20) / (1024 * 1024); // Convert to MB
-				const sizeDiff = accurateSize - memory.store[key].size;
-				memory.store[key].size = accurateSize;
+				const sizeDiff = accurateSize - entryRef.size;
+				entryRef.size = accurateSize;
 				currentMemorySize += sizeDiff;
+				if (currentMemorySize < 0) currentMemorySize = 0;
 			}
 		} catch (_e) {
 			// Ignore errors in async size calculation
@@ -161,7 +176,7 @@ function evictKeys() {
 		if (lruKey) {
 			const item = memory.store[lruKey];
 			if (item) {
-				currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
+				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 			}
 			delete memory.store[lruKey];
 			memory.lru.delete(lruKey);
@@ -206,7 +221,7 @@ function evictKeys() {
 		if (keyToEvict) {
 			const item = memory.store[keyToEvict];
 			if (item) {
-				currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
+				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 			}
 			delete memory.store[keyToEvict];
 			memory.lru.delete(keyToEvict);
@@ -217,7 +232,7 @@ function evictKeys() {
 
 module.exports.setItem = (key, value, ttl = defaultTtl) => {
 	try {
-		if (!memory.config.status || typeof key !== 'string' || typeof ttl !== 'number') {
+		if (!memory.config.status || typeof key !== 'string' || !Number.isFinite(ttl) || ttl < 0) {
 			return false;
 		}
 
@@ -236,16 +251,18 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 		if (memory.store[key]) {
 			// Updating existing key - remove old size immediately
 			if (memory.store[key].size) {
-				currentMemorySize -= memory.store[key].size;
+				subtractMemorySize(memory.store[key].size);
 			}
 		}
 
 		// Quick eviction check - use memory.lru.size instead of Object.keys()
-		while (currentMemorySize + quickSizeEstimate > maxMemorySize && memory.lru.size > 0) {
+		let evictionLimit = 1000;
+		while (currentMemorySize + quickSizeEstimate > maxMemorySize && memory.lru.size > 0 && evictionLimit > 0) {
 			evictKeys();
+			evictionLimit--;
 		}
 
-		const expiresAt = getTimestamp() + Number.parseInt(ttl, 10);
+		const expiresAt = getTimestamp() + Math.floor(ttl);
 
 		// Store with initial size estimate
 		memory.store[key] = {
@@ -282,15 +299,21 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
  */
 module.exports.itemStats = (key) => {
 	try {
-		if (memory.store[key]) {
-			const now = getTimestamp();
-			return {
-				expires_at: memory.store[key].expires_at,
-				remaining_seconds: memory.store[key].expires_at - now,
-				hit: memory.store[key].hit,
-			};
+		if (!memory.config.status) {
+			return false;
 		}
-		return null;
+		const item = memory.store[key];
+		if (!item) return null;
+		const now = getTimestamp();
+		if (item.expires_at <= now) {
+			expiredKeysPool.add(key);
+			return null;
+		}
+		return {
+			expires_at: item.expires_at,
+			remaining_seconds: item.expires_at - now,
+			hit: item.hit,
+		};
 	} catch (error) {
 		console.error('nope-redis -> Cant get item stats Error! ', error);
 		return false;
@@ -351,7 +374,7 @@ module.exports.deleteItem = (key) => {
 		}
 		if (memory.store[key]) {
 			const item = memory.store[key];
-			currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
+			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 			delete memory.store[key];
 			memory.lru.delete(key);
 			expiredKeysPool.delete(key);
@@ -454,7 +477,7 @@ module.exports.deleteItems = (keys) => {
 
 			if (memory.store[key]) {
 				const item = memory.store[key];
-				currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
+				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 				delete memory.store[key];
 				memory.lru.delete(key);
 				expiredKeysPool.delete(key);
@@ -490,9 +513,9 @@ module.exports.flushAll = () => {
  * Get comprehensive cache statistics
  *
  * @param {object} [options={}] - Statistics options
- * @param {boolean} [options.showKeys=false] - Include array of all keys
+ * @param {boolean} [options.showKeys=true] - Include array of all keys
  * @param {boolean} [options.showTotal=true] - Include total key count
- * @param {boolean} [options.showSize=false] - Force recalculate memory size
+ * @param {boolean} [options.showSize=false] - Include current memory usage in stats output
  * @returns {object} Statistics object with status, counts, memory usage, and configuration
  */
 module.exports.stats = (options = {}) => {
@@ -502,7 +525,7 @@ module.exports.stats = (options = {}) => {
 			showKeys: true,
 			showTotal: true,
 			showSize: false,
-			...options
+			...options,
 		};
 
 		const result = {
@@ -561,7 +584,7 @@ function formatSizeUnits(mb) {
  */
 function defaultMemory(withConfig = false) {
 	try {
-		const defaultMemory = {
+		const defaultState = {
 			config: {
 				killerIsFinished: true,
 				lastKiller: 0,
@@ -578,7 +601,7 @@ function defaultMemory(withConfig = false) {
 		expiredKeysPool.clear();
 		currentMemorySize = 0;
 		if (withConfig) {
-			memory.config = JSON.parse(JSON.stringify(defaultMemory.config));
+			memory.config = JSON.parse(JSON.stringify(defaultState.config));
 		}
 	} catch (error) {
 		console.error('nope-redis -> Cant default memory!', error);
@@ -593,7 +616,7 @@ function defaultMemory(withConfig = false) {
  * @returns {string}
  */
 
-async function memoryStats() {
+function memoryStats() {
 	try {
 		// Use native Date for timestamp formatting
 		const timestamp = new Date().toISOString().slice(0, 19);
@@ -625,7 +648,7 @@ function killer() {
 	for (const key of expiredKeysPool) {
 		if (memory.store[key]) {
 			const item = memory.store[key];
-			currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
+			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 			delete memory.store[key];
 			memory.lru.delete(key);
 		}
@@ -636,11 +659,12 @@ function killer() {
 	const keysToDelete = [];
 	let checked = 0;
 
-	for (const property in memory.store) {
+	for (const property of memory.lru.keys()) {
 		if (checked >= maxChecksPerCycle) break;
 		checked++;
 
-		if (memory.store[property].expires_at <= now) {
+		const item = memory.store[property];
+		if (item && item.expires_at <= now) {
 			keysToDelete.push(property);
 		}
 	}
@@ -649,7 +673,7 @@ function killer() {
 	for (const key of keysToDelete) {
 		const item = memory.store[key];
 		if (item) {
-			currentMemorySize -= item.size || (estimateSize(item.value) + 20) / (1024 * 1024);
+			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 		}
 		delete memory.store[key];
 		memory.lru.delete(key);
@@ -683,8 +707,8 @@ module.exports.SERVICE_KILL = async () => {
 		}
 		// Reset memory and status
 		defaultMemory(true);
-		KILL_SERVICE = false;
 	}
+	KILL_SERVICE = false; // Always reset
 	return true;
 };
 
@@ -696,7 +720,8 @@ module.exports.SERVICE_KILL = async () => {
  */
 module.exports.SERVICE_START = async () => {
 	if (memory.config.status === false) {
-		KILL_SERVICE = false; // Reset flag
+		KILL_SERVICE = false;
+		criticalError = 0;
 		return runner();
 	}
 	return false;
@@ -707,6 +732,10 @@ module.exports.SERVICE_START = async () => {
  */
 function runner() {
 	try {
+		if (runnerInterval) {
+			clearInterval(runnerInterval);
+			runnerInterval = null;
+		}
 		if (memory.config.status === false) {
 			if (criticalError <= 3) {
 				memory.config.status = true;

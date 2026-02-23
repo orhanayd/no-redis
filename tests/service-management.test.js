@@ -71,7 +71,7 @@ describe('Service Management', () => {
 			const configResult = nopeRedis.config({
 				defaultTtl: 60,
 				isMemoryStatsEnabled: true,
-				maxMemorySize: 10 * 1024 * 1024, // 10MB
+				maxMemorySize: 10, // 10MB
 				evictionPolicy: 'lfu',
 			});
 

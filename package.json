@@ -1,6 +1,6 @@
 {
 	"name": "nope-redis",
-	"version": "2.0.2",
+	"version": "2.0.3",
 	"description": "Simple & Fast Node.JS memory caching",
 	"main": "index.js",
 	"types": "index.d.ts",
@@ -12,19 +12,6 @@
 		"url": "git+https://github.com/orhanayd/no-redis.git"
 	},
 	"keywords": [
-		"redis",
-		"cache",
-		"caching",
-		"local",
-		"variable",
-		"multi",
-		"memory",
-		"internal",
-		"node",
-		"memcached",
-		"temp"
-	],
-	"tags": [
 		"redis",
 		"cache",
 		"caching",
