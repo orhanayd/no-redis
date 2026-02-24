@@ -1,12 +1,8 @@
-// External dependencies
-const KkDate = require('kk-date');
-
 /**
- * Get current Unix timestamp using kk-date
+ * Get current Unix timestamp
  */
 function getTimestamp() {
-	const d = new KkDate();
-	return Math.floor(d.getTime() / 1000);
+	return Math.floor(Date.now() / 1000);
 }
 
 let defaultTtl = 30;
@@ -41,7 +37,7 @@ const memory = {
 		memoryStats: {},
 		evictionCount: 0,
 	},
-	store: {},
+	store: new Map(),
 	lru: new Map(), // For LRU tracking
 };
 
@@ -101,47 +97,43 @@ module.exports.config = (options = {}) => {
  * @returns {boolean} true if stored successfully, false if service is stopped or error occurs
  */
 
-// Helper function to estimate value size
-function estimateSize(value) {
-	if (typeof value === 'boolean') return 4;
-	if (typeof value === 'string') return value.length * 2;
-	if (typeof value === 'number') return 8;
-	if (typeof value === 'object' && value !== null) {
-		// Check for Map and Set
-		if (value instanceof Map) return value.size * 100;
-		if (value instanceof Set) return value.size * 50;
-		// Check for Buffer (Node.js only)
-		if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
-			return value.length;
+// Helper function to estimate value size (recursive byte counter, no string allocation)
+function estimateSize(value, depth) {
+	if (depth === undefined) depth = 0;
+	if (depth > 10) return 64;
+	const t = typeof value;
+	if (t === 'boolean') return 4;
+	if (t === 'string') return value.length * 2;
+	if (t === 'number') return 8;
+	if (t === 'function') return 100;
+	if (t === 'symbol') return 8;
+	if (t === 'bigint') return 16;
+	if (value === null || t !== 'object') return 16;
+	// Map and Set
+	if (value instanceof Map) return value.size * 100;
+	if (value instanceof Set) return value.size * 50;
+	// Buffer (Node.js only)
+	if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) return value.length;
+	// TypedArray
+	if (ArrayBuffer.isView(value)) return value.byteLength;
+	// ArrayBuffer
+	if (value instanceof ArrayBuffer) return value.byteLength;
+	// Array
+	if (Array.isArray(value)) {
+		let bytes = 32;
+		for (let i = 0; i < value.length; i++) {
+			bytes += estimateSize(value[i], depth + 1) + 8;
 		}
-		// Check for TypedArray
-		if (ArrayBuffer.isView(value)) {
-			return value.byteLength;
-		}
-		// Check for ArrayBuffer
-		if (value instanceof ArrayBuffer) {
-			return value.byteLength;
-		}
-		// For other objects, try JSON.stringify with circular reference handling
-		try {
-			const seen = new WeakSet();
-			const jsonStr = JSON.stringify(value, (_, val) => {
-				if (typeof val === 'object' && val !== null) {
-					if (seen.has(val)) return '[Circular]';
-					seen.add(val);
-				}
-				return val;
-			});
-			return jsonStr.length * 2;
-		} catch (_e) {
-			// If JSON.stringify fails, estimate based on object keys
-			return Object.keys(value).length * 50; // Rough estimate
-		}
+		return bytes;
 	}
-	if (typeof value === 'function') return 100; // Estimate for functions
-	if (typeof value === 'symbol') return 8;
-	if (typeof value === 'bigint') return 16;
-	return 16; // Default for other types
+	// Plain object
+	const keys = Object.keys(value);
+	let bytes = 32;
+	for (let i = 0; i < keys.length; i++) {
+		bytes += keys[i].length * 2 + 16;
+		bytes += estimateSize(value[keys[i]], depth + 1) + 8;
+	}
+	return bytes;
 }
 
 /**
@@ -152,10 +144,11 @@ function estimateSize(value) {
  * @param {*} value - The value to calculate size for
  */
 function calculateAccurateSizeAsync(key, value) {
-	const entryRef = memory.store[key];
+	const entryRef = memory.store.get(key);
+	if (!entryRef) return;
 	setTimeout(() => {
 		try {
-			if (memory.store[key] === entryRef) {
+			if (memory.store.get(key) === entryRef) {
 				const accurateSize = (estimateSize(value) + 20) / (1024 * 1024); // Convert to MB
 				const sizeDiff = accurateSize - entryRef.size;
 				entryRef.size = accurateSize;
@@ -174,11 +167,11 @@ function evictKeys() {
 		// Evict least recently used - O(1) operation
 		const lruKey = memory.lru.keys().next().value;
 		if (lruKey) {
-			const item = memory.store[lruKey];
+			const item = memory.store.get(lruKey);
 			if (item) {
 				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 			}
-			delete memory.store[lruKey];
+			memory.store.delete(lruKey);
 			memory.lru.delete(lruKey);
 			memory.config.evictionCount++;
 		}
@@ -193,7 +186,7 @@ function evictKeys() {
 		for (const key of memory.lru.keys()) {
 			if (checked >= 20) break; // Limit sampling for performance
 
-			const item = memory.store[key];
+			const item = memory.store.get(key);
 			if (!item) continue;
 
 			if (evictionPolicy === 'lfu') {
@@ -219,11 +212,11 @@ function evictKeys() {
 		}
 
 		if (keyToEvict) {
-			const item = memory.store[keyToEvict];
+			const item = memory.store.get(keyToEvict);
 			if (item) {
 				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 			}
-			delete memory.store[keyToEvict];
+			memory.store.delete(keyToEvict);
 			memory.lru.delete(keyToEvict);
 			memory.config.evictionCount++;
 		}
@@ -248,10 +241,11 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 		const quickSizeEstimate = quickSizeEstimateBytes / (1024 * 1024); // Convert to MB
 
 		// Check if we need to evict (using quick estimate)
-		if (memory.store[key]) {
+		const existingItem = memory.store.get(key);
+		if (existingItem) {
 			// Updating existing key - remove old size immediately
-			if (memory.store[key].size) {
-				subtractMemorySize(memory.store[key].size);
+			if (existingItem.size) {
+				subtractMemorySize(existingItem.size);
 			}
 		}
 
@@ -265,12 +259,12 @@ module.exports.setItem = (key, value, ttl = defaultTtl) => {
 		const expiresAt = getTimestamp() + Math.floor(ttl);
 
 		// Store with initial size estimate
-		memory.store[key] = {
+		memory.store.set(key, {
 			value: value,
 			hit: 0,
 			expires_at: expiresAt,
 			size: quickSizeEstimate,
-		};
+		});
 
 		// Add quick estimate to current size
 		currentMemorySize += quickSizeEstimate;
@@ -302,7 +296,7 @@ module.exports.itemStats = (key) => {
 		if (!memory.config.status) {
 			return false;
 		}
-		const item = memory.store[key];
+		const item = memory.store.get(key);
 		if (!item) return null;
 		const now = getTimestamp();
 		if (item.expires_at <= now) {
@@ -332,7 +326,7 @@ module.exports.getItem = (key) => {
 			return false;
 		}
 
-		const item = memory.store[key];
+		const item = memory.store.get(key);
 		if (!item) {
 			return null;
 		}
@@ -372,10 +366,10 @@ module.exports.deleteItem = (key) => {
 		if (!memory.config.status) {
 			return false;
 		}
-		if (memory.store[key]) {
-			const item = memory.store[key];
+		const item = memory.store.get(key);
+		if (item) {
 			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-			delete memory.store[key];
+			memory.store.delete(key);
 			memory.lru.delete(key);
 			expiredKeysPool.delete(key);
 		}
@@ -434,7 +428,7 @@ module.exports.getItems = (keys) => {
 		for (const key of keys) {
 			if (typeof key !== 'string') continue;
 
-			const item = memory.store[key];
+			const item = memory.store.get(key);
 			if (item && item.expires_at > now) {
 				item.hit++;
 				memory.config.totalHits++;
@@ -475,10 +469,10 @@ module.exports.deleteItems = (keys) => {
 		for (const key of keys) {
 			if (typeof key !== 'string') continue;
 
-			if (memory.store[key]) {
-				const item = memory.store[key];
+			const item = memory.store.get(key);
+			if (item) {
 				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-				delete memory.store[key];
+				memory.store.delete(key);
 				memory.lru.delete(key);
 				expiredKeysPool.delete(key);
 			}
@@ -596,7 +590,7 @@ function defaultMemory(withConfig = false) {
 				evictionCount: 0,
 			},
 		};
-		memory.store = {};
+		memory.store = new Map();
 		memory.lru = new Map();
 		expiredKeysPool.clear();
 		currentMemorySize = 0;
@@ -646,10 +640,10 @@ function killer() {
 
 	// Process pre-identified expired keys first
 	for (const key of expiredKeysPool) {
-		if (memory.store[key]) {
-			const item = memory.store[key];
+		const item = memory.store.get(key);
+		if (item) {
 			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-			delete memory.store[key];
+			memory.store.delete(key);
 			memory.lru.delete(key);
 		}
 	}
@@ -663,7 +657,7 @@ function killer() {
 		if (checked >= maxChecksPerCycle) break;
 		checked++;
 
-		const item = memory.store[property];
+		const item = memory.store.get(property);
 		if (item && item.expires_at <= now) {
 			keysToDelete.push(property);
 		}
@@ -671,11 +665,11 @@ function killer() {
 
 	// Batch delete
 	for (const key of keysToDelete) {
-		const item = memory.store[key];
+		const item = memory.store.get(key);
 		if (item) {
 			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
 		}
-		delete memory.store[key];
+		memory.store.delete(key);
 		memory.lru.delete(key);
 	}
 
