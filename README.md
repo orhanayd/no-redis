@@ -69,15 +69,15 @@ _Node v24.18.0 · AMD EPYC 7763 64-Core Processor · linux x64 · 2026-07-15 —
 
 | Operation | ops/sec | ns/op |
 |-----------|--------:|------:|
-| SET (fresh string keys) | 2,645,701 | 378 |
-| SET (nested JSON, ~30 nodes) | 643,307 | 1,554 |
-| SET (overwrite existing keys) | 4,113,036 | 243 |
-| GET hit (100k keyspace) | 3,166,829 | 316 |
-| GET miss | 46,843,515 | 21 |
-| DELETE | 6,760,991 | 148 |
-| Mixed (70% get / 20% set / 10% delete) | 3,489,625 | 287 |
-| BATCH setItems (100 items/call) | 2,369,001 | 422 |
-| BATCH getItems (100 keys/call) | 1,223,137 | 818 |
+| SET (fresh string keys) | 2,547,398 | 393 |
+| SET (nested JSON, ~30 nodes) | 646,725 | 1,546 |
+| SET (overwrite existing keys) | 4,545,661 | 220 |
+| GET hit (100k keyspace) | 3,245,276 | 308 |
+| GET miss | 50,245,494 | 20 |
+| DELETE | 4,179,009 | 239 |
+| Mixed (70% get / 20% set / 10% delete) | 4,142,383 | 241 |
+| BATCH setItems (100 items/call) | 3,832,406 | 261 |
+| BATCH getItems (100 keys/call) | 1,401,486 | 714 |
 <!-- BENCH:END -->
 
 2.1.0 is 2–4x faster than 2.0.4 and eliminates the deferred-timer memory leak — see the
