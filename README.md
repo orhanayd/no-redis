@@ -69,15 +69,15 @@ _Node v24.18.0 · AMD EPYC 7763 64-Core Processor · linux x64 · 2026-07-15 —
 
 | Operation | ops/sec | ns/op |
 |-----------|--------:|------:|
-| SET (fresh string keys) | 2,479,741 | 403 |
-| SET (nested JSON, ~30 nodes) | 672,923 | 1,486 |
-| SET (overwrite existing keys) | 4,296,836 | 233 |
-| GET hit (100k keyspace) | 3,003,745 | 333 |
-| GET miss | 52,324,626 | 19 |
-| DELETE | 6,690,643 | 149 |
-| Mixed (70% get / 20% set / 10% delete) | 3,525,441 | 284 |
-| BATCH setItems (100 items/call) | 2,295,512 | 436 |
-| BATCH getItems (100 keys/call) | 1,138,472 | 878 |
+| SET (fresh string keys) | 2,794,335 | 358 |
+| SET (nested JSON, ~30 nodes) | 666,398 | 1,501 |
+| SET (overwrite existing keys) | 4,591,720 | 218 |
+| GET hit (100k keyspace) | 3,519,754 | 284 |
+| GET miss | 52,122,235 | 19 |
+| DELETE | 6,729,784 | 149 |
+| Mixed (70% get / 20% set / 10% delete) | 3,968,180 | 252 |
+| BATCH setItems (100 items/call) | 4,020,535 | 249 |
+| BATCH getItems (100 keys/call) | 1,432,458 | 698 |
 <!-- BENCH:END -->
 
 No memory leaks: expired entries are freed eagerly and byte accounting returns to exactly zero when
