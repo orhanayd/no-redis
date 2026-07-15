@@ -80,9 +80,9 @@ _Node v24.18.0 · AMD EPYC 7763 64-Core Processor · linux x64 · 2026-07-15 —
 | BATCH getItems (100 keys/call) | 1,401,486 | 714 |
 <!-- BENCH:END -->
 
-2.1.0 is 2–4x faster than 2.0.4 and eliminates the deferred-timer memory leak — see the
-[detailed performance notes](https://github.com/orhanayd/no-redis/blob/main/docs/README.md#performance)
-for the full comparison and methodology. Reproduce locally with `npm run bench`.
+No memory leaks: expired entries are freed eagerly and byte accounting returns to exactly zero when
+the cache empties — see the [detailed performance notes](https://github.com/orhanayd/no-redis/blob/main/docs/README.md#performance)
+for methodology and more details. Reproduce locally with `npm run bench`.
 
 ## Documentation
 
