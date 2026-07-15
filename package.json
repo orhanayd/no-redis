@@ -20,7 +20,7 @@
 		"index.d.ts"
 	],
 	"engines": {
-		"node": ">=12"
+		"node": ">=18"
 	},
 	"scripts": {
 		"test": "jest",

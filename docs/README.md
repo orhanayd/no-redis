@@ -34,7 +34,7 @@ Simple & Fast Node.js in-memory caching with Redis-like functionality, without a
 npm install nope-redis
 ```
 
-**Requirements:** Node.js v12 or higher. Zero runtime dependencies.
+**Requirements:** Node.js v18 or higher. Zero runtime dependencies.
 
 ## Quick Start
 

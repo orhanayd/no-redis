@@ -7,7 +7,7 @@ Simple & Fast Node.js in-memory caching — Redis-like functionality without a R
 - 🔄 **Eviction**: LRU, LFU and TTL policies with a configurable memory limit (MB)
 - 🎯 **Batch operations**, 📈 **statistics**, 🛡️ **self-recovery**, 📘 **TypeScript types**
 - 🔌 **Works with both ESM (`import`) and CommonJS (`require`)** — one shared cache instance
-- 🔧 **Zero runtime dependencies** — single file, Node.js ≥ 12
+- 🔧 **Zero runtime dependencies** — single file, Node.js ≥ 18
 
 ## Install
 
