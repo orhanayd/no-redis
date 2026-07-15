@@ -71,7 +71,7 @@ const memory = {
 module.exports.config = (options = {}) => {
 	try {
 		// Config can be set anytime
-		if (typeof options === 'object') {
+		if (typeof options === 'object' && options !== null) {
 			if (typeof options.isMemoryStatsEnabled === 'boolean') {
 				isMemoryStatsEnabled = options.isMemoryStatsEnabled;
 				if (isMemoryStatsEnabled && memory.config.nextMemoryStatsTime === 0) {
@@ -84,7 +84,7 @@ module.exports.config = (options = {}) => {
 					defaultTtl = now_ttl;
 				}
 			}
-			if (typeof options.maxMemorySize === 'number' && options.maxMemorySize > 0) {
+			if (Number.isFinite(options.maxMemorySize) && options.maxMemorySize > 0) {
 				maxMemorySizeMb = options.maxMemorySize;
 				maxMemorySizeBytes = Math.round(options.maxMemorySize * BYTES_PER_MB);
 				while (currentMemorySize > maxMemorySizeBytes && memory.store.size > 0) {
@@ -94,7 +94,7 @@ module.exports.config = (options = {}) => {
 			if (options.evictionPolicy && ['lru', 'lfu', 'ttl'].includes(options.evictionPolicy)) {
 				evictionPolicy = options.evictionPolicy;
 			}
-			if (typeof options.maxChecksPerCycle === 'number' && options.maxChecksPerCycle > 0) {
+			if (Number.isFinite(options.maxChecksPerCycle) && options.maxChecksPerCycle > 0) {
 				maxChecksPerCycle = options.maxChecksPerCycle;
 			}
 			return true;
@@ -130,9 +130,11 @@ function estimateSize(value, depth, state) {
 		const len = value.length;
 		for (let i = 0; i < len; i++) {
 			if (--state.nodes < 0) {
-				// budget exhausted: extrapolate the remainder from the average so far
+				// budget exhausted: extrapolate the remainder from the average so far,
+				// never below a flat per-element floor (a huge array must not size as ~0)
 				const visited = i === 0 ? 1 : i;
-				bytes += Math.floor(((bytes - 32) / visited) * (len - i));
+				const perElement = Math.max(Math.floor((bytes - 32) / visited), 16);
+				bytes += perElement * (len - i);
 				return bytes;
 			}
 			bytes += estimateSize(value[i], depth + 1, state) + 8;
@@ -145,7 +147,8 @@ function estimateSize(value, depth, state) {
 	for (let i = 0; i < len; i++) {
 		if (--state.nodes < 0) {
 			const visited = i === 0 ? 1 : i;
-			bytes += Math.floor(((bytes - 32) / visited) * (len - i));
+			const perEntry = Math.max(Math.floor((bytes - 32) / visited), 32);
+			bytes += perEntry * (len - i);
 			return bytes;
 		}
 		const k = keys[i];
@@ -284,12 +287,12 @@ module.exports.setItem = setItem;
 /**
  * Get statistics for a specific key
  *
- * @param {string} key - The key to get statistics for
- * @returns {object|null} Object with expires_at, remaining_seconds, and hit count, or null if key doesn't exist
+ * @param {string} key - The key to get statistics for (must be a string)
+ * @returns {object|null|false} Object with expires_at, remaining_seconds, and hit count; null if key doesn't exist; false if service is stopped or key is not a string
  */
 module.exports.itemStats = (key) => {
 	try {
-		if (!memory.config.status) {
+		if (!memory.config.status || typeof key !== 'string') {
 			return false;
 		}
 		const item = memory.store.get(key);
@@ -350,12 +353,12 @@ module.exports.getItem = getItem;
 /**
  * Delete an item from the cache
  *
- * @param {string} key - The key to delete
- * @returns {boolean} true if deleted successfully, false if service is stopped
+ * @param {string} key - The key to delete (must be a string)
+ * @returns {boolean} true if deleted successfully, false if service is stopped or key is not a string
  */
 function deleteItem(key) {
 	try {
-		if (!memory.config.status) {
+		if (!memory.config.status || typeof key !== 'string') {
 			return false;
 		}
 		const item = memory.store.get(key);
@@ -374,7 +377,7 @@ module.exports.deleteItem = deleteItem;
  * Set multiple items in a single operation
  *
  * @param {Array<{key: string, value: *, ttl?: number}>} items - Array of items to set
- * @returns {Array<boolean>|false} Array of success status for each item, or false on error
+ * @returns {Array<boolean>|false} Per-item success status (malformed elements yield false without aborting the batch), or false on error
  */
 module.exports.setItems = (items) => {
 	try {
@@ -384,6 +387,10 @@ module.exports.setItems = (items) => {
 
 		const results = [];
 		for (const item of items) {
+			if (item === null || typeof item !== 'object') {
+				results.push(false);
+				continue;
+			}
 			const { key, value, ttl } = item;
 			results.push(setItem(key, value, ttl));
 		}

@@ -8,6 +8,7 @@ Simple & Fast Node.js in-memory caching with Redis-like functionality, without a
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+  - [Module Systems (ESM & CommonJS)](#module-systems-esm--commonjs)
 - [API Reference](#api-reference)
   - [Basic Operations](#basic-operations)
   - [Batch Operations](#batch-operations)
@@ -36,6 +37,27 @@ npm install nope-redis
 **Requirements:** Node.js v12 or higher. Zero runtime dependencies.
 
 ## Quick Start
+
+### Module Systems (ESM & CommonJS)
+
+nope-redis works with both module systems out of the box:
+
+```javascript
+// CommonJS
+const nopeRedis = require("nope-redis");
+```
+
+```javascript
+// ESM — default and named imports are both supported
+import nopeRedis from "nope-redis";
+import { setItem, getItem, stats } from "nope-redis";
+```
+
+Both entry points resolve to the **same singleton**: the ESM entry (`index.mjs`) is a thin
+wrapper that re-exports the CommonJS implementation (`index.js`), so a value written via
+`require` is readable via `import` (and vice versa) within the same process, and only one
+background cleanup service ever runs. On very old Node versions (&lt; 12.16, no `exports`
+map support) module resolution falls back to the CommonJS `main` entry automatically.
 
 ### JavaScript
 
@@ -522,6 +544,7 @@ console.log(stats.memoryStats);
 - **Approximate Eviction**: LRU/LFU/TTL eviction uses sampled selection (like Redis), not globally exact ordering
 - **Oversized Items**: A single item larger than `maxMemorySize` is still stored (the limit bounds the aggregate, documented behavior)
 - **By-Reference Storage**: Values are stored by reference — mutating a stored object outside the cache also changes what readers see
+- **Falsy Value Sentinels**: `getItem` returns `null` for missing/expired keys and `false` when the service is stopped or the key is invalid — a *stored* `null` or `false` is therefore indistinguishable from those sentinels. If you need to cache `null`/`false`, wrap them (e.g. `{ v: null }`) or check existence with `itemStats(key) !== null`. Other falsy values (`0`, `''`, `NaN`) round-trip unambiguously. `getItems` distinguishes a stored `false` (only stored `null` collides with missing)
 
 ## Testing
 

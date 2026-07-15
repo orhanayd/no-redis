@@ -6,6 +6,7 @@ Simple & Fast Node.js in-memory caching — Redis-like functionality without a R
 - ⏰ **TTL**: automatic key expiration with eager cleanup on read
 - 🔄 **Eviction**: LRU, LFU and TTL policies with a configurable memory limit (MB)
 - 🎯 **Batch operations**, 📈 **statistics**, 🛡️ **self-recovery**, 📘 **TypeScript types**
+- 🔌 **Works with both ESM (`import`) and CommonJS (`require`)** — one shared cache instance
 - 🔧 **Zero runtime dependencies** — single file, Node.js ≥ 12
 
 ## Install
@@ -16,7 +17,10 @@ npm install nope-redis
 
 ## Quick Start
 
+Works with both **CommonJS** and **ESM** — both entry points share the same cache instance.
+
 ```javascript
+// CommonJS
 const nopeRedis = require('nope-redis');
 
 nopeRedis.setItem('user:1', { name: 'John', age: 30 }, 10); // TTL: 10s
@@ -25,6 +29,15 @@ nopeRedis.deleteItem('user:1');
 
 // Optional runtime configuration
 nopeRedis.config({ defaultTtl: 60, maxMemorySize: 100, evictionPolicy: 'lru' });
+```
+
+```javascript
+// ESM — default and named imports are both supported
+import nopeRedis, { setItem, getItem } from 'nope-redis';
+
+setItem('user:1', { name: 'John', age: 30 }, 10);
+const user = getItem('user:1');
+nopeRedis.deleteItem('user:1'); // same singleton as the named imports
 ```
 
 TypeScript definitions are included (`setItem<T>`, `getItem<T>`, …).

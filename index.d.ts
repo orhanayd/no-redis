@@ -96,7 +96,7 @@ declare namespace nopeRedis {
 	 * @param options Configuration options
 	 * @returns true on success, false on error
 	 */
-	export function config(options: Config): boolean;
+	export function config(options?: Config): boolean;
 
 	/**
 	 * Set an item in the cache
