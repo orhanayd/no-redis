@@ -98,6 +98,25 @@ describe('Timing and Service Lifecycle Tests', () => {
 			expect(value).toBe(null);
 		});
 
+		test('exact ms expiry boundary (deterministic clock)', () => {
+			// Pin the wall clock so the boundary is tested without any timer race:
+			// a 2s TTL item must be alive at +1999ms and expired at exactly +2000ms.
+			const t0 = Date.now();
+			const clock = jest.spyOn(Date, 'now');
+			try {
+				clock.mockReturnValue(t0);
+				nopeRedis.setItem('boundary', 'value', 2); // expires_at = t0 + 2000
+
+				clock.mockReturnValue(t0 + 1999);
+				expect(nopeRedis.getItem('boundary')).toBe('value');
+
+				clock.mockReturnValue(t0 + 2000);
+				expect(nopeRedis.getItem('boundary')).toBe(null);
+			} finally {
+				clock.mockRestore();
+			}
+		});
+
 		test('1 second TTL expiration', (done) => {
 			nopeRedis.setItem('ttl1', 'value', 1);
 
@@ -126,14 +145,14 @@ describe('Timing and Service Lifecycle Tests', () => {
 				expect(nopeRedis.getItem('ttl1')).toBe(null);
 				expect(nopeRedis.getItem('ttl2')).toBe('value2');
 				expect(nopeRedis.getItem('ttl3')).toBe('value3');
-			}, 1000);
+			}, 1500);
 
 			// Check at 2.5 seconds
 			setTimeout(() => {
 				expect(nopeRedis.getItem('ttl1')).toBe(null);
 				expect(nopeRedis.getItem('ttl2')).toBe(null);
 				expect(nopeRedis.getItem('ttl3')).toBe('value3');
-			}, 2000);
+			}, 2500);
 
 			// Check at 3.5 seconds
 			setTimeout(() => {
