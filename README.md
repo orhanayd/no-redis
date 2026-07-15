@@ -6,7 +6,7 @@ A lightweight, high-performance in-memory caching library for Node.js that provi
 
 ## Features
 
-- 🚀 **Blazing Fast**: 1.3M+ SET ops/sec, 2.6M+ GET ops/sec, 3M+ DELETE ops/sec
+- 🚀 **Blazing Fast**: 1.2M+ SET ops/sec, 2.3M+ GET ops/sec, ~3M DELETE ops/sec — with a flat heap under sustained load
 - 💾 **Flexible Storage**: Supports objects, arrays, strings, numbers, booleans, functions, and more
 - ⏰ **Auto-Expiration**: TTL-based automatic key expiration with efficient cleanup
 - 🔄 **Eviction Policies**: LRU, LFU, and TTL-based eviction strategies
@@ -15,7 +15,7 @@ A lightweight, high-performance in-memory caching library for Node.js that provi
 - 📈 **Statistics**: Built-in hit counters and memory usage tracking
 - 🎯 **Batch Operations**: Efficient bulk set/get/delete operations
 - 📘 **TypeScript Support**: Full TypeScript definitions included
-- 🔧 **Minimal Dependencies**: Only kk-date (v4.0.2) for robust date/time handling
+- 🔧 **Zero Dependencies**: No runtime dependencies at all
 
 ## Installation
 
@@ -277,27 +277,39 @@ await nopeRedis.SERVICE_START();
 
 ## Performance
 
-Benchmark results on modern hardware (Apple M1/M2):
+Benchmark results (Node.js 22, Linux x64 — `nope-redis` 2.1.0 vs 2.0.4 on identical workloads):
 
-| Operation | Rate | Performance |
-|-----------|------|-------------|
-| SET | 1,337,644 ops/sec | ~0.75μs per operation |
-| GET | 2,600,000+ ops/sec | ~0.38μs per operation |
-| DELETE | 3,000,000+ ops/sec | ~0.33μs per operation |
+| Operation | 2.0.4 | 2.1.0 | Change |
+|-----------|-------|-------|--------|
+| SET (string values, 500k fresh keys) | 468,086 ops/sec | 1,245,901 ops/sec | 2.7x |
+| SET (nested JSON, ~30 nodes) | 417,818 ops/sec | 575,535 ops/sec | 1.4x |
+| SET (overwrite existing keys) | 339,110 ops/sec | 1,111,389 ops/sec | 3.3x |
+| GET hit (100k keyspace) | 761,698 ops/sec | 2,335,685 ops/sec | 3.1x |
+| GET hit (1M keyspace) | 476,794 ops/sec | 1,020,672 ops/sec | 2.1x |
+| DELETE | 740,213 ops/sec | 2,985,836 ops/sec | 4.0x |
+| Mixed workload (70% get / 20% set / 10% delete) | 592,419 ops/sec | 1,767,373 ops/sec | 3.0x |
+| Eviction storm: worst 1k-op stall | 1,749 ms | 13.8 ms | 127x smoother |
+| Burst-to-steady heap ratio (300k sets) | 2.06 (leak) | 1.00 (flat) | leak eliminated |
+
+The 2.0.4 column explains the "memory bloats after millions of sets" symptom: every `setItem`
+scheduled a deferred `setTimeout` for size calculation, so sustained write loads accumulated
+millions of pending timers and closures (measured: 181 MB burst vs 88 MB steady for 300k sets).
+2.1.0 removes all deferred work — the same 300k-set burst now peaks exactly at its steady size.
 
 **Performance characteristics:**
-- O(1) complexity for all basic operations
+- O(1) complexity for all basic operations — reads never reorder any internal structure
 - String-only keys enforced for V8 optimization
-- Asynchronous size calculation prevents blocking
-- Batch processing for expired key cleanup
-- Pre-identified expired keys pool for efficiency
+- Synchronous, budgeted size estimation (never schedules timers or deferred work)
+- Expired keys are freed immediately when read (eager delete)
+- Background sweep with a rotating cursor guarantees full coverage as a backstop
 
 ## Memory Management
 
 ### Automatic Cleanup
-- Background service runs every 5 seconds
-- Processes up to 1000 expired keys per cycle
-- Expired keys marked during reads for batch deletion
+- Expired entries are removed the moment any read touches them — memory is reclaimed at access time
+- Background sweep runs every 5 seconds for keys that are never read
+- The sweep uses a persistent rotating cursor: each cycle advances up to `maxChecksPerCycle` entries and the next cycle continues where it stopped, so the whole store is guaranteed to be covered no matter how large it grows
+- The background timer is `unref`'d — the cache never keeps an otherwise-idle process alive (new in 2.1.0)
 - Memory statistics collected hourly (when enabled)
 
 ### Eviction Policies
@@ -313,9 +325,9 @@ nopeRedis.config({
     evictionPolicy: 'lru'
 });
 ```
-- Removes keys that haven't been accessed recently
-- Uses a Map to track access order with O(1) complexity
-- Every `getItem()` call updates the key's position
+- Removes keys that haven't been accessed recently (sampled approximation, Redis-style)
+- Every read stamps the entry with a monotonic access clock — no structure reordering on the hot path
+- Eviction samples a rotating window of entries and removes the oldest-accessed candidate
 - Best for: General-purpose caching, hot/cold data patterns
 
 **2. LFU (Least Frequently Used)**
@@ -349,7 +361,7 @@ nopeRedis.config({
 3. This continues until there's enough space for the new item
 4. The eviction count is tracked in statistics (`evictionCount`)
 
-**Performance Optimization**: LFU and TTL policies leverage the existing LRU map structure, checking only the first 20 least-recently-used items instead of scanning all keys. The eviction loop uses `memory.lru.size` instead of `Object.keys(memory.store).length` to check if store has items, avoiding array allocation and providing O(1) complexity.
+**Performance Optimization**: All three policies share one sampled evictor (the same approach Redis uses for its approximate LRU/LFU). Eviction samples a small rotating window of entries and removes the worst candidate for the active policy — oldest access stamp (LRU), lowest hit count (LFU), or soonest expiry (TTL). Selection is approximate rather than globally exact, which is what keeps reads completely reorder-free and makes eviction cost independent of store size. Eviction always makes measurable progress or stops — a lockup is structurally impossible.
 
 #### Example: Memory Pressure Handling
 
@@ -371,10 +383,11 @@ console.log(`Evicted ${stats.evictionCount} keys to maintain memory limit`);
 ```
 
 ### Memory Size Calculation
-- Quick estimation during set operations
-- Accurate async calculation with `setImmediate()`
-- Handles all JavaScript types including TypedArrays and Buffers
-- Circular reference detection
+- Computed synchronously at `setItem()` time and tracked as integer bytes — accounting is exact, never drifts, and returns to exactly zero when the cache empties
+- Exact for strings, numbers, booleans, Buffers, TypedArrays and ArrayBuffers
+- Objects and arrays use a budgeted deep scan (up to ~2000 nodes per value, depth-capped); larger structures are extrapolated from the average node size, so a huge value can never stall a set operation
+- Hostile values (throwing getters, Proxy traps) fall back to a flat estimate — `setItem` never fails because of sizing
+- Values are stored by reference; the estimate reflects the structure at set time
 
 ## Use Cases
 
@@ -396,7 +409,7 @@ console.log(`Evicted ${stats.evictionCount} keys to maintain memory limit`);
 | Memory Limits | ✅ | ❌ | ❌ | ✅ |
 | Statistics | Comprehensive | Basic | Basic | Basic |
 | Auto-Recovery | ✅ | ❌ | ❌ | ❌ |
-| Minimal Dependencies | ✅ (1 dep) | ❌ | ✅ | ✅ |
+| Minimal Dependencies | ✅ (0 deps) | ❌ | ✅ | ✅ |
 | TypeScript Types | ✅ | ✅ | ❌ | ✅ |
 
 ## Advanced Features
@@ -428,9 +441,11 @@ console.log(stats.memoryStats);
 - **Single Process**: Not suitable for distributed systems or multi-process architectures
 - **No Persistence**: Data is lost on restart (in-memory only)
 - **Memory Bound**: Limited by available heap memory
-- **Second Precision**: TTL precision is in seconds, not milliseconds
+- **Second Precision**: TTL values are given in whole seconds; expiry itself is checked with millisecond accuracy
 - **Key Type**: Keys must be strings for optimal performance
-- **Key Limit**: Practical limit of ~1 million keys (single object storage)
+- **Approximate Eviction**: LRU/LFU/TTL eviction uses sampled selection (like Redis), not globally exact ordering
+- **Oversized Items**: A single item larger than `maxMemorySize` is still stored (the limit bounds the aggregate, documented behavior)
+- **By-Reference Storage**: Values are stored by reference — mutating a stored object outside the cache also changes what readers see
 
 ## Testing
 

@@ -27,7 +27,7 @@ declare namespace nopeRedis {
 		total?: number;
 		/** Total cache hits across all keys */
 		totalHits: number;
-		/** Human-readable current memory usage (if showSize is true or isMemoryStatsEnabled is true) */
+		/** Human-readable current memory usage, computed synchronously from exact integer-byte accounting (if showSize is true) */
 		size?: string;
 		/** Number of evicted keys */
 		evictionCount: number;
@@ -143,6 +143,9 @@ declare namespace nopeRedis {
 
 	/**
 	 * Get multiple items at once
+	 *
+	 * Every requested key (including "__proto__") is returned as an OWN property of
+	 * the result object; expired entries are removed from the cache immediately.
 	 * @param keys Array of keys to retrieve
 	 * @returns Object with key-value pairs, non-existent/expired keys return null
 	 */

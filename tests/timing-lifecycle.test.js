@@ -252,7 +252,7 @@ describe('Timing and Service Lifecycle Tests', () => {
 		}, 8000);
 	});
 
-	describe('Async Size Calculation Timing', () => {
+	describe('Size Accounting Timing', () => {
 		beforeEach(async () => {
 			await nopeRedis.SERVICE_START();
 			nopeRedis.flushAll();
@@ -263,7 +263,7 @@ describe('Timing and Service Lifecycle Tests', () => {
 			await nopeRedis.SERVICE_KILL();
 		});
 
-		test('size updates asynchronously', (done) => {
+		test('size is reflected synchronously at set time', () => {
 			const complexObj = {
 				data: 'x'.repeat(1000),
 				nested: {
@@ -271,41 +271,29 @@ describe('Timing and Service Lifecycle Tests', () => {
 				},
 			};
 
-			nopeRedis.setItem('async', complexObj);
+			nopeRedis.setItem('sync-sized', complexObj);
 
-			// Wait for async size calculation
-			setTimeout(() => {
-				const finalStats = nopeRedis.stats({ showSize: true });
-				const finalSize = finalStats.size;
-
-				// Size should be updated
-				expect(finalSize).toBeDefined();
-				// Size update: ${initialSize} -> ${finalSize}
-
-				done();
-			}, 100);
+			// No waiting: sizing happens inside setItem, there is no deferred work
+			const finalStats = nopeRedis.stats({ showSize: true });
+			expect(finalStats.size).toBeDefined();
+			expect(finalStats.size).not.toBe('0 MB');
 		});
 
-		test('rapid updates handle size correctly', (done) => {
+		test('rapid updates handle size correctly', () => {
 			// Rapidly update the same key
 			for (let i = 0; i < 10; i++) {
 				nopeRedis.setItem('rapid', { count: i, data: 'x'.repeat(i * 100) });
 			}
 
-			// Wait for all async calculations
-			setTimeout(() => {
-				const stats = nopeRedis.stats({ showSize: true });
-				expect(stats.size).not.toBe('0 MB');
+			const stats = nopeRedis.stats({ showSize: true });
+			expect(stats.size).not.toBe('0 MB');
 
-				// Should only have one key
-				expect(stats.total).toBe(1);
+			// Should only have one key
+			expect(stats.total).toBe(1);
 
-				// Value should be the last one
-				const value = nopeRedis.getItem('rapid');
-				expect(value.count).toBe(9);
-
-				done();
-			}, 200);
+			// Value should be the last one
+			const value = nopeRedis.getItem('rapid');
+			expect(value.count).toBe(9);
 		});
 	});
 

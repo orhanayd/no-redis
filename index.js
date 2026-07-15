@@ -1,5 +1,6 @@
 /**
- * Get current Unix timestamp
+ * Get current Unix timestamp (seconds) — used only for killer/stats bookkeeping.
+ * Hot paths compare millisecond timestamps directly (no division per operation).
  */
 function getTimestamp() {
 	return Math.floor(Date.now() / 1000);
@@ -13,11 +14,27 @@ const intervalSecond = 5;
 let runnerInterval = null;
 let maxChecksPerCycle = 100000; // Maximum keys to check per cleanup cycle
 
-// Performance optimizations
-let maxMemorySize = 100; // 100MB default (in MB) limit
-let currentMemorySize = 0;
+// Memory accounting is integer BYTES end to end; MB conversion happens only for display.
+const BYTES_PER_MB = 1024 * 1024;
+let maxMemorySizeMb = 100; // 100MB default limit (public unit)
+let maxMemorySizeBytes = 100 * BYTES_PER_MB;
+let currentMemorySize = 0; // integer bytes
 let evictionPolicy = 'lru'; // 'lru', 'lfu', 'ttl'
-const expiredKeysPool = new Set();
+
+// Sampled eviction (Redis-style approximate LRU/LFU/TTL):
+// reads never reorder any structure — they only stamp entry.la with a monotonic
+// access clock. Eviction samples EVICTION_SAMPLES entries via a rotating cursor
+// and removes the worst candidate for the active policy.
+const EVICTION_SAMPLES = 8;
+let accessClock = 0;
+let sampleCursor = null; // rotating iterator over memory.store for eviction sampling
+let sweepCursor = null; // persistent iterator over memory.store for the background sweep
+
+// Synchronous size estimation bounds
+const SIZE_NODE_BUDGET = 2000; // max nodes visited per deep scan (rest is extrapolated)
+const SIZE_MAX_DEPTH = 10;
+const ENTRY_OVERHEAD = 120; // map slot + entry object + bookkeeping fields (bytes)
+const SIZE_FALLBACK = 256; // used when a hostile value (throwing getter/Proxy) breaks the scan
 
 function subtractMemorySize(size) {
 	currentMemorySize -= size;
@@ -37,8 +54,7 @@ const memory = {
 		memoryStats: {},
 		evictionCount: 0,
 	},
-	store: new Map(),
-	lru: new Map(), // For LRU tracking
+	store: new Map(), // key -> { value, hit, expires_at (ms), size (bytes), la }
 };
 
 /**
@@ -69,9 +85,10 @@ module.exports.config = (options = {}) => {
 				}
 			}
 			if (typeof options.maxMemorySize === 'number' && options.maxMemorySize > 0) {
-				maxMemorySize = options.maxMemorySize;
-				while (currentMemorySize > maxMemorySize && memory.lru.size > 0) {
-					evictKeys();
+				maxMemorySizeMb = options.maxMemorySize;
+				maxMemorySizeBytes = Math.round(options.maxMemorySize * BYTES_PER_MB);
+				while (currentMemorySize > maxMemorySizeBytes && memory.store.size > 0) {
+					if (!evictKeys()) break;
 				}
 			}
 			if (options.evictionPolicy && ['lru', 'lfu', 'ttl'].includes(options.evictionPolicy)) {
@@ -89,6 +106,134 @@ module.exports.config = (options = {}) => {
 };
 
 /**
+ * Estimate value size in integer bytes (recursive, budgeted deep scan).
+ * Exact for strings/numbers/booleans/Buffers/TypedArrays; heuristic for
+ * objects/arrays with extrapolation once the node budget is exhausted.
+ */
+function estimateSize(value, depth, state) {
+	const t = typeof value;
+	if (t === 'string') return value.length * 2;
+	if (t === 'number') return 8;
+	if (t === 'boolean') return 4;
+	if (t === 'function') return 100;
+	if (t === 'symbol') return 8;
+	if (t === 'bigint') return 16;
+	if (value === null || t !== 'object') return 16;
+	if (depth > SIZE_MAX_DEPTH) return 64;
+	if (value instanceof Map) return 32 + value.size * 100;
+	if (value instanceof Set) return 32 + value.size * 50;
+	if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) return value.length;
+	if (ArrayBuffer.isView(value)) return value.byteLength;
+	if (value instanceof ArrayBuffer) return value.byteLength;
+	if (Array.isArray(value)) {
+		let bytes = 32;
+		const len = value.length;
+		for (let i = 0; i < len; i++) {
+			if (--state.nodes < 0) {
+				// budget exhausted: extrapolate the remainder from the average so far
+				const visited = i === 0 ? 1 : i;
+				bytes += Math.floor(((bytes - 32) / visited) * (len - i));
+				return bytes;
+			}
+			bytes += estimateSize(value[i], depth + 1, state) + 8;
+		}
+		return bytes;
+	}
+	const keys = Object.keys(value);
+	let bytes = 32;
+	const len = keys.length;
+	for (let i = 0; i < len; i++) {
+		if (--state.nodes < 0) {
+			const visited = i === 0 ? 1 : i;
+			bytes += Math.floor(((bytes - 32) / visited) * (len - i));
+			return bytes;
+		}
+		const k = keys[i];
+		bytes += k.length * 2 + 16;
+		bytes += estimateSize(value[k], depth + 1, state) + 8;
+	}
+	return bytes;
+}
+
+const sizeScanState = { nodes: 0 };
+
+/**
+ * Full entry size in bytes (value + key + per-entry overhead), computed
+ * synchronously at set time. Never throws: hostile values (throwing getters,
+ * Proxy traps) fall back to a flat estimate so setItem keeps succeeding.
+ */
+function estimateEntrySize(key, value) {
+	try {
+		let bytes;
+		const t = typeof value;
+		if (t === 'string') {
+			bytes = value.length * 2;
+		} else if (t === 'number') {
+			bytes = 8;
+		} else if (t === 'boolean') {
+			bytes = 4;
+		} else {
+			sizeScanState.nodes = SIZE_NODE_BUDGET;
+			bytes = estimateSize(value, 0, sizeScanState);
+		}
+		return bytes + ENTRY_OVERHEAD + key.length * 2;
+	} catch (_e) {
+		return SIZE_FALLBACK + ENTRY_OVERHEAD + key.length * 2;
+	}
+}
+
+/**
+ * Remove one entry and its accounted bytes. The single funnel for every
+ * delete path (expiry, eviction, deleteItem, sweep) — keeps accounting exact.
+ */
+function removeEntry(key, item) {
+	subtractMemorySize(item.size);
+	memory.store.delete(key);
+}
+
+/**
+ * Evict one entry using sampled selection (Redis-style approximation).
+ * Samples up to EVICTION_SAMPLES entries via a rotating cursor and evicts:
+ * - lru: the entry with the oldest last-access stamp
+ * - lfu: the entry with the lowest hit count
+ * - ttl: the entry expiring soonest
+ *
+ * @returns {boolean} true if an entry was evicted — callers MUST stop looping
+ * on false, which structurally prevents the infinite-eviction-loop failure mode.
+ */
+function evictKeys() {
+	if (memory.store.size === 0) return false;
+	let victimKey;
+	let victimItem;
+	let best = Infinity;
+	let sampled = 0;
+	if (sampleCursor === null) sampleCursor = memory.store.entries();
+	while (sampled < EVICTION_SAMPLES) {
+		let n = sampleCursor.next();
+		if (n.done) {
+			sampleCursor = memory.store.entries();
+			n = sampleCursor.next();
+			if (n.done) break; // store emptied concurrently within this call chain
+		}
+		const item = n.value[1];
+		let metric;
+		if (evictionPolicy === 'lru') metric = item.la;
+		else if (evictionPolicy === 'lfu') metric = item.hit;
+		else metric = item.expires_at;
+		if (metric < best) {
+			best = metric;
+			victimKey = n.value[0];
+			victimItem = item;
+		}
+		sampled++;
+	}
+	if (victimItem === undefined) return false;
+	removeEntry(victimKey, victimItem);
+	memory.config.evictionCount++;
+	return true;
+}
+
+/**
  * Set an item in the cache
  *
  * @param {string} key - The key to store the value under (must be a string)
@@ -96,194 +241,45 @@ module.exports.config = (options = {}) => {
  * @param {number} [ttl=defaultTtl] - Time-to-live in seconds (optional, defaults to global defaultTtl)
  * @returns {boolean} true if stored successfully, false if service is stopped or error occurs
  */
-
-// Helper function to estimate value size (recursive byte counter, no string allocation)
-function estimateSize(value, depth) {
-	if (depth === undefined) depth = 0;
-	if (depth > 10) return 64;
-	const t = typeof value;
-	if (t === 'boolean') return 4;
-	if (t === 'string') return value.length * 2;
-	if (t === 'number') return 8;
-	if (t === 'function') return 100;
-	if (t === 'symbol') return 8;
-	if (t === 'bigint') return 16;
-	if (value === null || t !== 'object') return 16;
-	// Map and Set
-	if (value instanceof Map) return value.size * 100;
-	if (value instanceof Set) return value.size * 50;
-	// Buffer (Node.js only)
-	if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) return value.length;
-	// TypedArray
-	if (ArrayBuffer.isView(value)) return value.byteLength;
-	// ArrayBuffer
-	if (value instanceof ArrayBuffer) return value.byteLength;
-	// Array
-	if (Array.isArray(value)) {
-		let bytes = 32;
-		for (let i = 0; i < value.length; i++) {
-			bytes += estimateSize(value[i], depth + 1) + 8;
-		}
-		return bytes;
-	}
-	// Plain object
-	const keys = Object.keys(value);
-	let bytes = 32;
-	for (let i = 0; i < keys.length; i++) {
-		bytes += keys[i].length * 2 + 16;
-		bytes += estimateSize(value[keys[i]], depth + 1) + 8;
-	}
-	return bytes;
-}
-
-/**
- * Calculate accurate size asynchronously (browser and Node.js compatible)
- * Uses setTimeout instead of setImmediate for cross-platform compatibility
- *
- * @param {string} key - The key to update size for
- * @param {*} value - The value to calculate size for
- */
-function calculateAccurateSizeAsync(key, value) {
-	const entryRef = memory.store.get(key);
-	if (!entryRef) return;
-	setTimeout(() => {
-		try {
-			if (memory.store.get(key) === entryRef) {
-				const accurateSize = (estimateSize(value) + 20) / (1024 * 1024); // Convert to MB
-				const sizeDiff = accurateSize - entryRef.size;
-				entryRef.size = accurateSize;
-				currentMemorySize += sizeDiff;
-				if (currentMemorySize < 0) currentMemorySize = 0;
-			}
-		} catch (_e) {
-			// Ignore errors in async size calculation
-		}
-	}, 0);
-}
-
-// Eviction function - optimized for performance
-function evictKeys() {
-	if (evictionPolicy === 'lru') {
-		// Evict least recently used - O(1) operation
-		const lruKey = memory.lru.keys().next().value;
-		if (lruKey) {
-			const item = memory.store.get(lruKey);
-			if (item) {
-				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-			}
-			memory.store.delete(lruKey);
-			memory.lru.delete(lruKey);
-			memory.config.evictionCount++;
-		}
-	} else if (evictionPolicy === 'lfu' || evictionPolicy === 'ttl') {
-		// For LFU and TTL, use LRU map to get candidates without Object.keys()
-		// This avoids creating a huge array and provides O(1) access
-		let keyToEvict = null;
-		let compareValue = Infinity;
-
-		// Check first 20 items from LRU map (oldest accessed items)
-		let checked = 0;
-		for (const key of memory.lru.keys()) {
-			if (checked >= 20) break; // Limit sampling for performance
-
-			const item = memory.store.get(key);
-			if (!item) continue;
-
-			if (evictionPolicy === 'lfu') {
-				// Find item with lowest hit count
-				if (item.hit < compareValue) {
-					compareValue = item.hit;
-					keyToEvict = key;
-				}
-			} else {
-				// TTL policy
-				// Find item expiring soonest
-				if (item.expires_at < compareValue) {
-					compareValue = item.expires_at;
-					keyToEvict = key;
-				}
-			}
-			checked++;
-		}
-
-		// If no good candidate from sampling, just evict the oldest from LRU
-		if (!keyToEvict) {
-			keyToEvict = memory.lru.keys().next().value;
-		}
-
-		if (keyToEvict) {
-			const item = memory.store.get(keyToEvict);
-			if (item) {
-				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-			}
-			memory.store.delete(keyToEvict);
-			memory.lru.delete(keyToEvict);
-			memory.config.evictionCount++;
-		}
-	}
-}
-
-module.exports.setItem = (key, value, ttl = defaultTtl) => {
+function setItem(key, value, ttl = defaultTtl) {
 	try {
 		if (!memory.config.status || typeof key !== 'string' || !Number.isFinite(ttl) || ttl < 0) {
 			return false;
 		}
 
-		// Quick size estimate for eviction check (in bytes then convert to MB)
-		let quickSizeEstimateBytes = 20; // metadata
-		if (typeof value === 'string') quickSizeEstimateBytes += value.length * 2;
-		else if (typeof value === 'number') quickSizeEstimateBytes += 8;
-		else if (typeof value === 'boolean') quickSizeEstimateBytes += 4;
-		else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) quickSizeEstimateBytes += value.length;
-		else if (ArrayBuffer.isView(value)) quickSizeEstimateBytes += value.byteLength;
-		else quickSizeEstimateBytes += 100; // Default estimate for objects
+		// Size is exact-or-extrapolated synchronously — no deferred work, no timers.
+		const size = estimateEntrySize(key, value);
 
-		const quickSizeEstimate = quickSizeEstimateBytes / (1024 * 1024); // Convert to MB
-
-		// Check if we need to evict (using quick estimate)
-		const existingItem = memory.store.get(key);
-		if (existingItem) {
-			// Updating existing key - remove old size immediately
-			if (existingItem.size) {
-				subtractMemorySize(existingItem.size);
-			}
+		// Remove any previous entry BEFORE the eviction loop so eviction can never
+		// double-subtract the old size or evict the slot we are about to fill.
+		const existing = memory.store.get(key);
+		if (existing !== undefined) {
+			subtractMemorySize(existing.size);
+			memory.store.delete(key);
 		}
 
-		// Quick eviction check - use memory.lru.size instead of Object.keys()
 		let evictionLimit = 1000;
-		while (currentMemorySize + quickSizeEstimate > maxMemorySize && memory.lru.size > 0 && evictionLimit > 0) {
-			evictKeys();
+		while (currentMemorySize + size > maxMemorySizeBytes && memory.store.size > 0 && evictionLimit > 0) {
+			if (!evictKeys()) break;
 			evictionLimit--;
 		}
 
-		const expiresAt = getTimestamp() + Math.floor(ttl);
-
-		// Store with initial size estimate
 		memory.store.set(key, {
 			value: value,
 			hit: 0,
-			expires_at: expiresAt,
-			size: quickSizeEstimate,
+			expires_at: Date.now() + Math.floor(ttl) * 1000,
+			size: size,
+			la: ++accessClock,
 		});
-
-		// Add quick estimate to current size
-		currentMemorySize += quickSizeEstimate;
-
-		// Update LRU
-		if (memory.lru.has(key)) {
-			memory.lru.delete(key);
-		}
-		memory.lru.set(key, true);
-
-		// Calculate accurate size asynchronously
-		calculateAccurateSizeAsync(key, value);
+		currentMemorySize += size;
 
 		return true;
 	} catch (error) {
 		console.error('nope-redis -> Cant Set Error! ', error);
 		return false;
 	}
-};
+}
+module.exports.setItem = setItem;
 
 /**
  * Get statistics for a specific key
@@ -297,15 +293,16 @@ module.exports.itemStats = (key) => {
 			return false;
 		}
 		const item = memory.store.get(key);
-		if (!item) return null;
-		const now = getTimestamp();
-		if (item.expires_at <= now) {
-			expiredKeysPool.add(key);
+		if (item === undefined) return null;
+		const nowMs = Date.now();
+		if (item.expires_at <= nowMs) {
+			removeEntry(key, item);
 			return null;
 		}
+		const expiresAtSec = Math.floor(item.expires_at / 1000);
 		return {
-			expires_at: item.expires_at,
-			remaining_seconds: item.expires_at - now,
+			expires_at: expiresAtSec,
+			remaining_seconds: expiresAtSec - Math.floor(nowMs / 1000),
 			hit: item.hit,
 		};
 	} catch (error) {
@@ -317,75 +314,62 @@ module.exports.itemStats = (key) => {
 /**
  * Get an item from the cache
  *
+ * Expired entries are removed immediately on read (eager delete) — memory is
+ * reclaimed at access time instead of waiting for the background sweep.
+ *
  * @param {string} key - The key to retrieve
  * @returns {*|null} The stored value, or null if key doesn't exist or has expired
  */
-module.exports.getItem = (key) => {
+function getItem(key) {
 	try {
 		if (!memory.config.status || typeof key !== 'string') {
 			return false;
 		}
 
 		const item = memory.store.get(key);
-		if (!item) {
+		if (item === undefined) {
 			return null;
 		}
 
-		const now = getTimestamp();
-
-		if (item.expires_at > now) {
+		if (item.expires_at > Date.now()) {
 			item.hit++;
+			item.la = ++accessClock;
 			memory.config.totalHits++;
-
-			// Update LRU
-			if (evictionPolicy === 'lru') {
-				memory.lru.delete(key);
-				memory.lru.set(key, true);
-			}
-
 			return item.value;
 		}
 
-		// Mark for deletion in next cycle
-		expiredKeysPool.add(key);
+		removeEntry(key, item);
 		return null;
 	} catch (error) {
 		console.error('nope-redis -> Critical error! ', error);
 		return false;
 	}
-};
+}
+module.exports.getItem = getItem;
 
 /**
  * Delete an item from the cache
  *
  * @param {string} key - The key to delete
- * @returns {boolean} true if deleted successfully, false if service is stopped or key doesn't exist
+ * @returns {boolean} true if deleted successfully, false if service is stopped
  */
-module.exports.deleteItem = (key) => {
+function deleteItem(key) {
 	try {
 		if (!memory.config.status) {
 			return false;
 		}
 		const item = memory.store.get(key);
-		if (item) {
-			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-			memory.store.delete(key);
-			memory.lru.delete(key);
-			expiredKeysPool.delete(key);
+		if (item !== undefined) {
+			removeEntry(key, item);
 		}
 		return true;
 	} catch (error) {
 		console.error('nope-redis -> Cant delete item', error);
 		return false;
 	}
-};
+}
+module.exports.deleteItem = deleteItem;
 
-/**
- * flush all data
- *
- * @returns {Boolean}
- */
-// Batch operations
 /**
  * Set multiple items in a single operation
  *
@@ -401,7 +385,7 @@ module.exports.setItems = (items) => {
 		const results = [];
 		for (const item of items) {
 			const { key, value, ttl } = item;
-			results.push(module.exports.setItem(key, value, ttl));
+			results.push(setItem(key, value, ttl));
 		}
 		return results;
 	} catch (error) {
@@ -423,28 +407,35 @@ module.exports.getItems = (keys) => {
 		}
 
 		const results = {};
-		const now = getTimestamp();
+		const nowMs = Date.now();
 
 		for (const key of keys) {
 			if (typeof key !== 'string') continue;
 
+			let resultValue = null;
 			const item = memory.store.get(key);
-			if (item && item.expires_at > now) {
-				item.hit++;
-				memory.config.totalHits++;
-
-				// Update LRU
-				if (evictionPolicy === 'lru') {
-					memory.lru.delete(key);
-					memory.lru.set(key, true);
+			if (item !== undefined) {
+				if (item.expires_at > nowMs) {
+					item.hit++;
+					item.la = ++accessClock;
+					memory.config.totalHits++;
+					resultValue = item.value;
+				} else {
+					removeEntry(key, item); // eager delete on expired read
 				}
+			}
 
-				results[key] = item.value;
+			// "__proto__" as a plain assignment would REPLACE the result object's
+			// prototype instead of creating an own property — define it explicitly.
+			if (key === '__proto__') {
+				Object.defineProperty(results, key, {
+					value: resultValue,
+					enumerable: true,
+					writable: true,
+					configurable: true,
+				});
 			} else {
-				results[key] = null;
-				if (item) {
-					expiredKeysPool.add(key);
-				}
+				results[key] = resultValue;
 			}
 		}
 		return results;
@@ -470,11 +461,8 @@ module.exports.deleteItems = (keys) => {
 			if (typeof key !== 'string') continue;
 
 			const item = memory.store.get(key);
-			if (item) {
-				subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-				memory.store.delete(key);
-				memory.lru.delete(key);
-				expiredKeysPool.delete(key);
+			if (item !== undefined) {
+				removeEntry(key, item);
 			}
 		}
 		return true;
@@ -533,20 +521,20 @@ module.exports.stats = (options = {}) => {
 			isMemoryStatsEnabled,
 			evictionCount: memory.config.evictionCount,
 			evictionPolicy,
-			maxMemorySize: formatSizeUnits(maxMemorySize),
+			maxMemorySize: formatSizeUnits(maxMemorySizeMb),
 		};
 		if (isMemoryStatsEnabled) {
 			result.nextMemoryStatsTime = memory.config.nextMemoryStatsTime;
 			result.memoryStats = memory.config.memoryStats;
 		}
 		if (config.showTotal) {
-			result.total = memory.lru.size;
+			result.total = memory.store.size;
 		}
 		if (config.showSize) {
-			result.size = formatSizeUnits(currentMemorySize);
+			result.size = formatSizeUnits(currentMemorySize / BYTES_PER_MB);
 		}
 		if (config.showKeys) {
-			result.keys = Array.from(memory.lru.keys());
+			result.keys = Array.from(memory.store.keys());
 		}
 		return result;
 	} catch (error) {
@@ -591,8 +579,9 @@ function defaultMemory(withConfig = false) {
 			},
 		};
 		memory.store = new Map();
-		memory.lru = new Map();
-		expiredKeysPool.clear();
+		// Both cursors point into the replaced Map — they MUST be dropped here.
+		sweepCursor = null;
+		sampleCursor = null;
 		currentMemorySize = 0;
 		if (withConfig) {
 			memory.config = JSON.parse(JSON.stringify(defaultState.config));
@@ -603,19 +592,12 @@ function defaultMemory(withConfig = false) {
 	}
 }
 
-/**
- * get object size
- *
- * @param {object} object
- * @returns {string}
- */
-
 function memoryStats() {
 	try {
 		// Use native Date for timestamp formatting
 		const timestamp = new Date().toISOString().slice(0, 19);
 
-		memory.config.memoryStats[timestamp] = formatSizeUnits(currentMemorySize);
+		memory.config.memoryStats[timestamp] = formatSizeUnits(currentMemorySize / BYTES_PER_MB);
 		const keys = Object.keys(memory.config.memoryStats);
 		if (keys.length > 25) {
 			// Use splice for better performance
@@ -631,46 +613,32 @@ function memoryStats() {
 }
 
 /**
- * Optimized deleter for expired keys
+ * Background sweep for expired keys that are never read.
+ *
+ * Uses a persistent rotating cursor across cycles: each run advances up to
+ * maxChecksPerCycle entries and the next run continues where it stopped, so a
+ * full rotation is guaranteed every ceil(size / maxChecksPerCycle) cycles no
+ * matter how large the store grows. (The old scan restarted from the front
+ * every cycle, so expired keys behind long-lived ones were never reached.)
  */
 function killer() {
+	const nowMs = Date.now();
 	const now = getTimestamp();
 
 	memory.config.killerIsFinished = false;
 
-	// Process pre-identified expired keys first
-	for (const key of expiredKeysPool) {
-		const item = memory.store.get(key);
-		if (item) {
-			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-			memory.store.delete(key);
-			memory.lru.delete(key);
-		}
-	}
-	expiredKeysPool.clear();
-
-	// Batch process with early termination
-	const keysToDelete = [];
+	if (sweepCursor === null) sweepCursor = memory.store.entries();
 	let checked = 0;
-
-	for (const property of memory.lru.keys()) {
-		if (checked >= maxChecksPerCycle) break;
+	while (checked < maxChecksPerCycle) {
+		const n = sweepCursor.next();
+		if (n.done) {
+			sweepCursor = null; // full rotation completed — restart next cycle
+			break;
+		}
+		if (n.value[1].expires_at <= nowMs) {
+			removeEntry(n.value[0], n.value[1]);
+		}
 		checked++;
-
-		const item = memory.store.get(property);
-		if (item && item.expires_at <= now) {
-			keysToDelete.push(property);
-		}
-	}
-
-	// Batch delete
-	for (const key of keysToDelete) {
-		const item = memory.store.get(key);
-		if (item) {
-			subtractMemorySize(item.size || (estimateSize(item.value) + 20) / (1024 * 1024));
-		}
-		memory.store.delete(key);
-		memory.lru.delete(key);
 	}
 
 	memory.config.killerIsFinished = true;
@@ -760,6 +728,10 @@ function runner() {
 				runner();
 			}
 		}, intervalSecond * 1000);
+		// The cache must never keep an otherwise-idle process alive.
+		if (runnerInterval && typeof runnerInterval.unref === 'function') {
+			runnerInterval.unref();
+		}
 		return true; // Success return
 	} catch (error) {
 		console.error('nope-redis -> Critical Error flushed all data! > ', error);
