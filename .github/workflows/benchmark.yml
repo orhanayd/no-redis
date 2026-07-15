@@ -1,0 +1,68 @@
+name: Update README benchmarks
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**/*.js'
+      - '.github/workflows/benchmark.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    # Fork PRs are skipped: the default token cannot push the refreshed tables back.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # A broken build must never refresh the published numbers.
+      - name: Run test suite
+        run: npm test
+
+      - name: Run benchmark
+        run: node benchmarks/benchmark.js --json > bench.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench.json
+
+      - name: Refresh benchmark tables (README + docs)
+        run: node scripts/update-readme.js bench.json
+
+      - name: Commit and push refreshed tables
+        run: |
+          for f in README.md docs/*.md; do
+            [ -f "$f" ] && git add "$f"
+          done
+          if git diff --cached --quiet; then
+            echo "No benchmark table changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # [skip ci] keeps the auto-commit from re-triggering this workflow.
+          git commit -m "chore(bench): refresh benchmark numbers [skip ci]"
+          git push origin HEAD:${{ github.head_ref }}

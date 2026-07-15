@@ -12,7 +12,8 @@
 		"node": ">=12"
 	},
 	"scripts": {
-		"test": "jest"
+		"test": "jest",
+		"bench": "node benchmarks/benchmark.js"
 	},
 	"repository": {
 		"type": "git",
