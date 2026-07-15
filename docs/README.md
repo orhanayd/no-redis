@@ -339,15 +339,15 @@ _Node v24.18.0 · AMD EPYC 7763 64-Core Processor · linux x64 · 2026-07-15 —
 
 | Operation | ops/sec | ns/op |
 |-----------|--------:|------:|
-| SET (fresh string keys) | 2,547,398 | 393 |
-| SET (nested JSON, ~30 nodes) | 646,725 | 1,546 |
-| SET (overwrite existing keys) | 4,545,661 | 220 |
-| GET hit (100k keyspace) | 3,245,276 | 308 |
-| GET miss | 50,245,494 | 20 |
-| DELETE | 4,179,009 | 239 |
-| Mixed (70% get / 20% set / 10% delete) | 4,142,383 | 241 |
-| BATCH setItems (100 items/call) | 3,832,406 | 261 |
-| BATCH getItems (100 keys/call) | 1,401,486 | 714 |
+| SET (fresh string keys) | 2,479,741 | 403 |
+| SET (nested JSON, ~30 nodes) | 672,923 | 1,486 |
+| SET (overwrite existing keys) | 4,296,836 | 233 |
+| GET hit (100k keyspace) | 3,003,745 | 333 |
+| GET miss | 52,324,626 | 19 |
+| DELETE | 6,690,643 | 149 |
+| Mixed (70% get / 20% set / 10% delete) | 3,525,441 | 284 |
+| BATCH setItems (100 items/call) | 2,295,512 | 436 |
+| BATCH getItems (100 keys/call) | 1,138,472 | 878 |
 <!-- BENCH:END -->
 
 ### Running Benchmarks Locally
