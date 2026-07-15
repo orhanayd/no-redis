@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Every Node line covered by the engines field (>=18) that still receives Jest 30 support.
+      matrix:
+        node-version: [18, 20, 22, 24]
+    name: Node ${{ matrix.node-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint check
+        run: npx @biomejs/biome check .
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Verify ESM/CJS entry points
+        run: |
+          node -e "const c = require('./index.js'); if (typeof c.setItem !== 'function') process.exit(1);"
+          node --input-type=module -e "import c, { setItem } from './index.mjs'; if (typeof setItem !== 'function' || c.setItem !== setItem) process.exit(1);"

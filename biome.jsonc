@@ -27,6 +27,7 @@
 		}
 	},
 	"javascript": {
+		"globals": ["jest"],
 		"formatter": {
 			"jsxQuoteStyle": "single",
 			"quoteStyle": "single",

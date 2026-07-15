@@ -1,6 +1,6 @@
 const nopeRedis = require('../index');
 
-describe('Performance Comparison: Sync vs Async Size Calculation', () => {
+describe('Performance Comparison: Synchronous Budgeted Size Calculation', () => {
 	beforeEach(async () => {
 		await nopeRedis.SERVICE_START();
 		nopeRedis.flushAll();
@@ -83,7 +83,7 @@ describe('Performance Comparison: Sync vs Async Size Calculation', () => {
 
 		// Complex objects: ~${complexTime}ms (${Math.round((iterations / complexTime) * 1000)} ops/sec)
 
-		// Should still be fast due to async size calculation
+		// Must stay fast even though sizing is synchronous (budgeted deep scan)
 		expect(complexTime).toBeLessThan(1000);
 
 		// Verify all items were stored
@@ -118,7 +118,7 @@ describe('Performance Comparison: Sync vs Async Size Calculation', () => {
 		expect(mixedTime).toBeLessThan(1000);
 	});
 
-	test('memory size accuracy after async calculations', (done) => {
+	test('memory size accuracy is immediate', () => {
 		const items = [];
 		const count = 100;
 
@@ -133,25 +133,13 @@ describe('Performance Comparison: Sync vs Async Size Calculation', () => {
 			nopeRedis.setItem(`item${i}`, item);
 		}
 
-		// Initial memory size (quick estimates)
-		nopeRedis.stats();
-
-		// Wait for async calculations to complete
-		setTimeout(() => {
-			const finalStats = nopeRedis.stats({ showSize: true });
-
-			// Memory size updates asynchronously
-			// Items: ${finalStats.total}
-
-			// Size should be updated and more accurate
-			expect(finalStats.total).toBe(count);
-			expect(finalStats.size).not.toBe('0 MB');
-
-			done();
-		}, 500);
+		// Sizing is synchronous: totals and size are final right away
+		const finalStats = nopeRedis.stats({ showSize: true });
+		expect(finalStats.total).toBe(count);
+		expect(finalStats.size).not.toBe('0 MB');
 	});
 
-	test('eviction still works with async size calculation', () => {
+	test('eviction works with synchronously sized values', () => {
 		// Set very small memory limit
 		nopeRedis.config({
 			maxMemorySize: 0.01, // 10KB in MB

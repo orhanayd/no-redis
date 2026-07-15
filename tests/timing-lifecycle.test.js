@@ -98,6 +98,25 @@ describe('Timing and Service Lifecycle Tests', () => {
 			expect(value).toBe(null);
 		});
 
+		test('exact ms expiry boundary (deterministic clock)', () => {
+			// Pin the wall clock so the boundary is tested without any timer race:
+			// a 2s TTL item must be alive at +1999ms and expired at exactly +2000ms.
+			const t0 = Date.now();
+			const clock = jest.spyOn(Date, 'now');
+			try {
+				clock.mockReturnValue(t0);
+				nopeRedis.setItem('boundary', 'value', 2); // expires_at = t0 + 2000
+
+				clock.mockReturnValue(t0 + 1999);
+				expect(nopeRedis.getItem('boundary')).toBe('value');
+
+				clock.mockReturnValue(t0 + 2000);
+				expect(nopeRedis.getItem('boundary')).toBe(null);
+			} finally {
+				clock.mockRestore();
+			}
+		});
+
 		test('1 second TTL expiration', (done) => {
 			nopeRedis.setItem('ttl1', 'value', 1);
 
@@ -126,14 +145,14 @@ describe('Timing and Service Lifecycle Tests', () => {
 				expect(nopeRedis.getItem('ttl1')).toBe(null);
 				expect(nopeRedis.getItem('ttl2')).toBe('value2');
 				expect(nopeRedis.getItem('ttl3')).toBe('value3');
-			}, 1000);
+			}, 1500);
 
 			// Check at 2.5 seconds
 			setTimeout(() => {
 				expect(nopeRedis.getItem('ttl1')).toBe(null);
 				expect(nopeRedis.getItem('ttl2')).toBe(null);
 				expect(nopeRedis.getItem('ttl3')).toBe('value3');
-			}, 2000);
+			}, 2500);
 
 			// Check at 3.5 seconds
 			setTimeout(() => {
@@ -252,7 +271,7 @@ describe('Timing and Service Lifecycle Tests', () => {
 		}, 8000);
 	});
 
-	describe('Async Size Calculation Timing', () => {
+	describe('Size Accounting Timing', () => {
 		beforeEach(async () => {
 			await nopeRedis.SERVICE_START();
 			nopeRedis.flushAll();
@@ -263,7 +282,7 @@ describe('Timing and Service Lifecycle Tests', () => {
 			await nopeRedis.SERVICE_KILL();
 		});
 
-		test('size updates asynchronously', (done) => {
+		test('size is reflected synchronously at set time', () => {
 			const complexObj = {
 				data: 'x'.repeat(1000),
 				nested: {
@@ -271,41 +290,29 @@ describe('Timing and Service Lifecycle Tests', () => {
 				},
 			};
 
-			nopeRedis.setItem('async', complexObj);
+			nopeRedis.setItem('sync-sized', complexObj);
 
-			// Wait for async size calculation
-			setTimeout(() => {
-				const finalStats = nopeRedis.stats({ showSize: true });
-				const finalSize = finalStats.size;
-
-				// Size should be updated
-				expect(finalSize).toBeDefined();
-				// Size update: ${initialSize} -> ${finalSize}
-
-				done();
-			}, 100);
+			// No waiting: sizing happens inside setItem, there is no deferred work
+			const finalStats = nopeRedis.stats({ showSize: true });
+			expect(finalStats.size).toBeDefined();
+			expect(finalStats.size).not.toBe('0 MB');
 		});
 
-		test('rapid updates handle size correctly', (done) => {
+		test('rapid updates handle size correctly', () => {
 			// Rapidly update the same key
 			for (let i = 0; i < 10; i++) {
 				nopeRedis.setItem('rapid', { count: i, data: 'x'.repeat(i * 100) });
 			}
 
-			// Wait for all async calculations
-			setTimeout(() => {
-				const stats = nopeRedis.stats({ showSize: true });
-				expect(stats.size).not.toBe('0 MB');
+			const stats = nopeRedis.stats({ showSize: true });
+			expect(stats.size).not.toBe('0 MB');
 
-				// Should only have one key
-				expect(stats.total).toBe(1);
+			// Should only have one key
+			expect(stats.total).toBe(1);
 
-				// Value should be the last one
-				const value = nopeRedis.getItem('rapid');
-				expect(value.count).toBe(9);
-
-				done();
-			}, 200);
+			// Value should be the last one
+			const value = nopeRedis.getItem('rapid');
+			expect(value.count).toBe(9);
 		});
 	});
 
